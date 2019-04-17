@@ -149,7 +149,10 @@ pub fn main() {
     let instance = back::Instance::create("gfx-rs instance", 1);
     let mut adapters = instance.enumerate_adapters();
     let adapter = adapters.remove(0);
-    let mut surface = instance.create_surface(window.get_window());
+    let mut surface = match window.get_window() {
+        Some(window) => Some(instance.create_surface(window)),
+        None => None,
+    };
     let mut servo = Servo::new(window.clone(), adapter, surface, Box::new(instance));
     let browser_id = BrowserId::new();
     servo.handle_events(vec![WindowEvent::NewBrowser(target_url, browser_id)]);

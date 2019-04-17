@@ -179,7 +179,12 @@ impl<Window, Back> Servo<Window, Back>
 where
     Window: WindowMethods + 'static + 'static, Back: gfx_hal::Backend,
 {
-    pub fn new(window: Rc<Window>, adapter: gfx_hal::Adapter<Back>, surface: Back::Surface, instance: Box<gfx_hal::Instance<Backend=Back>>) -> Servo<Window, Back> {
+    pub fn new(
+        window: Rc<Window>,
+        adapter: gfx_hal::Adapter<Back>,
+        surface: Option<Back::Surface>,
+        instance: Box<gfx_hal::Instance<Backend=Back>>
+    ) -> Servo<Window, Back> {
         // Global configuration options, parsed from the command line.
         let opts = opts::get();
 
@@ -226,13 +231,13 @@ where
             debug_flags.set(webrender::DebugFlags::PROFILER_DBG, opts.webrender_stats);
 
             let render_notifier = Box::new(RenderNotifier::new(compositor_proxy.clone()));
-            let size = window.get_window().get_inner_size().unwrap();
+            let size = window.get_inner_size();
             let init = webrender::DeviceInit {
                 instance,
                 adapter,
                 surface,
                 window_size: (size.width as i32, size.height as i32),
-                descriptor_count: None,
+                descriptor_count: Some(1600),
                 cache_path: None,
                 save_cache: false,
             };
