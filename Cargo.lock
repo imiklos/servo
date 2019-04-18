@@ -5262,13 +5262,13 @@ dependencies = [
 [[package]]
 name = "webrender"
 version = "0.60.0"
-source = "git+https://github.com/servo/webrender#95973e6872ff19ab59d1bd26c2ab71260d2d37e7"
+source = "git+https://github.com/servo/webrender#b1f2570deee48b679f49a4b74ecba27ec56eb045"
 replace = "webrender 0.60.0 (git+https://github.com/imiklos/webrender?branch=wr_for_servo_headless)"
 
 [[package]]
 name = "webrender"
 version = "0.60.0"
-source = "git+https://github.com/imiklos/webrender?branch=wr_for_servo_headless#a10ecb43cc06dc936f805829321d8d21ff7a1d34"
+source = "git+https://github.com/imiklos/webrender?branch=wr_for_servo_headless#ba1e21a9561a4aef58b19c8118dffc9b7a53a9a9"
 dependencies = [
  "app_units 0.7.1 (registry+https://github.com/rust-lang/crates.io-index)",
  "base64 0.10.1 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -5310,13 +5310,13 @@ dependencies = [
 [[package]]
 name = "webrender_api"
 version = "0.60.0"
-source = "git+https://github.com/servo/webrender#95973e6872ff19ab59d1bd26c2ab71260d2d37e7"
+source = "git+https://github.com/servo/webrender#b1f2570deee48b679f49a4b74ecba27ec56eb045"
 replace = "webrender_api 0.60.0 (git+https://github.com/imiklos/webrender?branch=wr_for_servo_headless)"
 
 [[package]]
 name = "webrender_api"
 version = "0.60.0"
-source = "git+https://github.com/imiklos/webrender?branch=wr_for_servo_headless#a10ecb43cc06dc936f805829321d8d21ff7a1d34"
+source = "git+https://github.com/imiklos/webrender?branch=wr_for_servo_headless#ba1e21a9561a4aef58b19c8118dffc9b7a53a9a9"
 dependencies = [
  "app_units 0.7.1 (registry+https://github.com/rust-lang/crates.io-index)",
  "bincode 1.1.2 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -5338,7 +5338,7 @@ dependencies = [
 [[package]]
 name = "webrender_build"
 version = "0.0.1"
-source = "git+https://github.com/imiklos/webrender?branch=wr_for_servo_headless#a10ecb43cc06dc936f805829321d8d21ff7a1d34"
+source = "git+https://github.com/imiklos/webrender?branch=wr_for_servo_headless#ba1e21a9561a4aef58b19c8118dffc9b7a53a9a9"
 dependencies = [
  "sha2 0.8.0 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
