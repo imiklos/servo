@@ -1123,6 +1123,43 @@ impl WebGLImpl {
             WebGLCommand::GetRenderbufferParameter(target, pname, ref chan) => {
                 Self::get_renderbuffer_parameter(ctx.gl(), target, pname, chan)
             },
+            WebGLCommand::CreateTransformFeedback(ref sender) => {
+                let value = ctx.gl().gen_transform_feedbacks();
+                sender.send(value).unwrap()
+            },
+            WebGLCommand::DeleteTransformFeedback(id) => {
+                ctx.gl().delete_transform_feedbacks(id);
+            },
+            WebGLCommand::IsTransformFeedback(id, ref sender) => {
+                let value = ctx.gl().is_transform_feedback(id);
+                sender.send(value).unwrap()
+            },
+            WebGLCommand::BindTransformFeedback(target, id) => {
+                ctx.gl().bind_transform_feedback(target, id);
+            },
+            WebGLCommand::BeginTransformFeedback(mode) => {
+                ctx.gl().begin_transform_feedback(mode);
+            },
+            WebGLCommand::EndTransformFeedback() => {
+                ctx.gl().end_transform_feedback();
+            },
+            WebGLCommand::PauseTransformFeedback() => {
+                ctx.gl().pause_transform_feedback();
+            },
+            WebGLCommand::ResumeTransformFeedback() => {
+                ctx.gl().resume_transform_feedback();
+            },
+            WebGLCommand::GetTransformFeedbackVarying(program, index, ref sender) => {
+                let (size, ty, name) = ctx.gl().get_transform_feedback_varying(program.get(), index);
+                sender.send((size, ty, name)).unwrap();
+            },
+            WebGLCommand::TransformFeedbackVaryings(program, ref varyings, buffer_mode) => {
+                let mut cl = varyings.clone();
+                let c_varyings = cl.iter_mut().map(|varying| {
+                    std::ffi::CString::new(varying.as_str()).unwrap()
+                }).collect::<Vec<_>>();
+                ctx.gl().transform_feedback_varyings(program.get(), c_varyings.as_slice(), buffer_mode);
+            },
             WebGLCommand::GetFramebufferAttachmentParameter(
                 target,
                 attachment,
@@ -1793,7 +1830,6 @@ impl WebGLImpl {
                 active_uniforms: vec![].into(),
             };
         }
-
         let mut num_active_attribs = [0];
         unsafe {
             gl.get_program_iv(

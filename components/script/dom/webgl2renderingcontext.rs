@@ -3,6 +3,7 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
 use crate::dom::bindings::codegen::Bindings::WebGL2RenderingContextBinding;
+use crate::js::conversions::ToJSValConvertible;
 use crate::dom::bindings::codegen::Bindings::WebGL2RenderingContextBinding::WebGL2RenderingContextConstants as constants;
 use crate::dom::bindings::codegen::Bindings::WebGL2RenderingContextBinding::WebGL2RenderingContextMethods;
 use crate::dom::bindings::codegen::Bindings::WebGLRenderingContextBinding::WebGLContextAttributes;
@@ -11,7 +12,6 @@ use crate::dom::bindings::codegen::UnionTypes::ArrayBufferViewOrArrayBuffer;
 use crate::dom::bindings::codegen::UnionTypes::Float32ArrayOrUnrestrictedFloatSequence;
 use crate::dom::bindings::codegen::UnionTypes::ImageDataOrHTMLImageElementOrHTMLCanvasElementOrHTMLVideoElement;
 use crate::dom::bindings::codegen::UnionTypes::Int32ArrayOrLongSequence;
-use crate::dom::bindings::conversions::ToJSValConvertible;
 use crate::dom::bindings::error::{ErrorResult, Fallible};
 use crate::dom::bindings::reflector::{reflect_dom_object, Reflector};
 use crate::dom::bindings::root::{Dom, DomRoot, LayoutDom, MutNullableDom};
@@ -19,6 +19,7 @@ use crate::dom::bindings::str::DOMString;
 use crate::dom::htmlcanvaselement::HTMLCanvasElement;
 use crate::dom::htmliframeelement::HTMLIFrameElement;
 use crate::dom::webglactiveinfo::WebGLActiveInfo;
+use crate::dom::bindings::reflector::DomObject;
 use crate::dom::webglbuffer::WebGLBuffer;
 use crate::dom::webglframebuffer::WebGLFramebuffer;
 use crate::dom::webglprogram::WebGLProgram;
@@ -32,12 +33,13 @@ use crate::dom::webglshader::WebGLShader;
 use crate::dom::webglshaderprecisionformat::WebGLShaderPrecisionFormat;
 use crate::dom::webglsync::WebGLSync;
 use crate::dom::webgltexture::WebGLTexture;
+use crate::dom::webgltransformfeedback::WebGLTransformFeedback;
 use crate::dom::webgluniformlocation::WebGLUniformLocation;
 use crate::dom::window::Window;
 use crate::script_runtime::JSContext;
 use canvas_traits::webgl::WebGLError::*;
 /// https://www.khronos.org/registry/webgl/specs/latest/2.0/webgl.idl
-use canvas_traits::webgl::{webgl_channel, GLContextAttributes, WebGLCommand, WebGLVersion};
+use canvas_traits::webgl::{Parameter, webgl_channel, GLContextAttributes, WebGLCommand, WebGLVersion, WebGLResult};
 use dom_struct::dom_struct;
 use euclid::default::Size2D;
 use js::jsapi::JSObject;
@@ -54,6 +56,7 @@ pub struct WebGL2RenderingContext {
     occlusion_query: MutNullableDom<WebGLQuery>,
     primitives_query: MutNullableDom<WebGLQuery>,
     samplers: Box<[MutNullableDom<WebGLSampler>]>,
+    current_transform_feedback: MutNullableDom<WebGLTransformFeedback>,
 }
 
 impl WebGL2RenderingContext {
@@ -76,6 +79,7 @@ impl WebGL2RenderingContext {
             occlusion_query: MutNullableDom::new(None),
             primitives_query: MutNullableDom::new(None),
             samplers: samplers,
+            current_transform_feedback: MutNullableDom::new(None),
         })
     }
 
@@ -145,6 +149,17 @@ impl WebGL2RenderingContextMethods for WebGL2RenderingContext {
                 assert!(idx < self.samplers.len());
                 let sampler = self.samplers[idx].get();
                 optional_root_object_to_js_or_null!(*cx, sampler)
+            },
+            constants::TRANSFORM_FEEDBACK_BINDING => {
+                let id = self.base.GetParameter(cx, parameter).to_int32();
+                rooted!(in(*cx) let mut rval = NullValue());
+                if id == 0 { return rval };
+                let _ = unsafe {
+                    if let Some(tf) = self.current_transform_feedback.get() {
+                        tf.to_jsval(*cx, rval.handle_mut())
+                    }
+                };
+                rval.get()
             },
             _ => self.base.GetParameter(cx, parameter),
         }
@@ -1419,6 +1434,153 @@ impl WebGL2RenderingContextMethods for WebGL2RenderingContext {
                 NullValue()
             },
         }
+    }
+    fn CreateTransformFeedback(&self) -> Option<DomRoot<WebGLTransformFeedback>> {
+        Some(WebGLTransformFeedback::new(&self.base))
+    }
+
+    fn DeleteTransformFeedback(&self, tf: Option<&WebGLTransformFeedback>) {
+        if let Some(tf) = tf {
+            handle_potential_webgl_error!(self.base, self.base.validate_ownership(tf), return);
+            tf.delete(false);
+            self.current_transform_feedback.set(None);
+        }
+    }
+
+    fn IsTransformFeedback(&self, tf: Option<&WebGLTransformFeedback>) -> bool {
+        match tf {
+            Some(tf) => {
+                if !tf.is_valid() {
+                    return false;
+                }
+                handle_potential_webgl_error!(self.base, self.base.validate_ownership(tf), return false);
+                let (sender, receiver) = webgl_channel().unwrap();
+                self.base
+                    .send_command(WebGLCommand::IsTransformFeedback(tf.id(), sender));
+                receiver.recv().unwrap()
+            },
+            None => false,
+        }
+    }
+
+    fn BindTransformFeedback(&self, target: u32, tf: Option<&WebGLTransformFeedback>) {
+        if target != constants::TRANSFORM_FEEDBACK {
+            self.base.webgl_error(InvalidEnum);
+            return
+        }
+        if let Some(transform_feedback) = tf {
+            handle_potential_webgl_error!(self.base, self.base.validate_ownership(transform_feedback), return);
+            if !transform_feedback.is_valid() {
+                self.base.webgl_error(InvalidOperation);
+                return;
+            }
+            if let Some(current_tf) = self.current_transform_feedback.get() {
+                if current_tf.is_active() && !current_tf.is_paused() {
+                    self.base.webgl_error(InvalidOperation);
+                    return;
+                }
+            }
+            transform_feedback.bind(&self.base, target);
+            self.current_transform_feedback.set(Some(transform_feedback));
+        }
+    }
+
+    fn BeginTransformFeedback(&self, primitiveMode: u32) {
+        match primitiveMode {
+            constants::POINTS |
+            constants::LINES |
+            constants::TRIANGLES => {
+                match self.current_transform_feedback.get() {
+                    Some(current_tf) => {
+                        if current_tf.is_active() {
+                            self.base.webgl_error(InvalidOperation);
+                            return;
+                        }
+                        current_tf.begin(&self.base, primitiveMode);
+                    },
+                    // GL_INVALID_OPERATION is generated by
+                    // glBeginTransformFeedback if any binding point
+                    // used in transform feedback mode does not have a
+                    // buffer object bound. In interleaved mode,
+                    // only the first buffer object binding point is ever written to.
+                    //
+                    // GL_INVALID_OPERATION is generated by
+                    // glBeginTransformFeedback if no binding
+                    // points would be used, either because no
+                    // program object is active of because the active
+                    // program object has specified no varying variables to record.
+                    None => {
+                        self.base.webgl_error(InvalidOperation);
+                        return;
+                    }
+                }
+            },
+            _ => self.base.webgl_error(InvalidEnum),
+        };
+    }
+
+    fn EndTransformFeedback(&self) {
+        if let Some(current_tf) = self.current_transform_feedback.get() {
+            if !current_tf.is_active() {
+                self.base.webgl_error(InvalidOperation);
+                return;
+            }
+            current_tf.end(&self.base);
+        }
+    }
+
+    fn ResumeTransformFeedback(&self) {
+        if let Some(current_tf) = self.current_transform_feedback.get() {
+            if !current_tf.is_active() || !current_tf.is_paused() {
+                self.base.webgl_error(InvalidOperation);
+                return;
+            }
+            current_tf.resume(&self.base);
+        }
+    }
+
+    fn PauseTransformFeedback(&self) {
+        if let Some(current_tf) = self.current_transform_feedback.get() {
+            if !current_tf.is_active() || current_tf.is_paused() {
+                self.base.webgl_error(InvalidOperation);
+                return;
+            }
+            current_tf.pause(&self.base);
+        }
+    }
+
+    fn TransformFeedbackVaryings(&self, program: &WebGLProgram, varyings: Vec<DOMString>, bufferMode: u32) {
+        handle_potential_webgl_error!(self.base, program.validate(), return);
+        let strs = varyings.iter().map(|name| {
+            name.get_str()
+        }).collect::<Vec<String>>();
+        match bufferMode {
+            constants::INTERLEAVED_ATTRIBS => self.base.send_command(WebGLCommand::TransformFeedbackVaryings(program.id(), strs, bufferMode)),
+            constants::SEPARATE_ATTRIBS => {
+                let (sender, receiver) = webgl_channel().unwrap();
+                match handle_potential_webgl_error!(self.base, Parameter::from_u32(constants::MAX_TRANSFORM_FEEDBACK_SEPARATE_ATTRIBS), return) {
+                    Parameter::Int(param) => {
+                        self.base.send_command(WebGLCommand::GetParameterInt(param, sender));
+                    },
+                    _ => {}
+                };
+                let max_tf_sp_att = receiver.recv().unwrap() as usize;
+                if strs.len() > max_tf_sp_att {
+                    self.base.webgl_error(InvalidValue);
+                    return
+                }
+                self.base.send_command(WebGLCommand::TransformFeedbackVaryings(program.id(), strs, bufferMode));
+            },
+            _ => self.base.webgl_error(InvalidEnum),
+        }
+    }
+
+    fn GetTransformFeedbackVarying(&self, program: &WebGLProgram, index: u32) -> Option<DomRoot<WebGLActiveInfo>> {
+        let (sender, receiver) = webgl_channel().unwrap();
+        self.base
+            .send_command(WebGLCommand::GetTransformFeedbackVarying(program.id(), index, sender));
+        let (size, ty, name) = receiver.recv().unwrap();
+        Some(WebGLActiveInfo::new(self.base.global().as_window(), size, ty, DOMString::from(name)))
     }
 }
 
