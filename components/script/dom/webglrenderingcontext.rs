@@ -258,7 +258,7 @@ impl WebGLRenderingContext {
         &self.limits
     }
 
-    fn current_vao(&self) -> DomRoot<WebGLVertexArrayObjectOES> {
+    pub fn current_vao(&self) -> DomRoot<WebGLVertexArrayObjectOES> {
         self.current_vao.or_init(|| {
             DomRoot::from_ref(
                 self.default_vao
@@ -998,6 +998,10 @@ impl WebGLRenderingContext {
         self.bound_buffer_array.get()
     }
 
+    pub fn array_buffer_slot(&self) -> &MutNullableDom<WebGLBuffer> {
+        &self.bound_buffer_array
+    }
+
     pub fn bound_buffer(&self, target: u32) -> WebGLResult<Option<DomRoot<WebGLBuffer>>> {
         match target {
             constants::ARRAY_BUFFER => Ok(self.bound_buffer_array.get()),
@@ -1096,6 +1100,72 @@ impl WebGLRenderingContext {
 
     pub fn formats(&self) -> &GLFormats {
         &self.framebuffer_format
+    }
+
+    #[allow(unsafe_code)]
+    pub fn buffer_data(
+        &self,
+        target: u32,
+        data: Option<ArrayBufferViewOrArrayBuffer>,
+        usage: u32,
+        bound_buffer: Option<DomRoot<WebGLBuffer>>,
+    ) {
+        let data = handle_potential_webgl_error!(self, data.ok_or(InvalidValue), return);
+        let bound_buffer =
+            handle_potential_webgl_error!(self, bound_buffer.ok_or(InvalidOperation), return);
+
+        let data = unsafe {
+            // Safe because we don't do anything with JS until the end of the method.
+            match data {
+                ArrayBufferViewOrArrayBuffer::ArrayBuffer(ref data) => data.as_slice(),
+                ArrayBufferViewOrArrayBuffer::ArrayBufferView(ref data) => data.as_slice(),
+            }
+        };
+        handle_potential_webgl_error!(self, bound_buffer.buffer_data(target, data, usage));
+    }
+
+    pub fn buffer_data_(
+        &self,
+        target: u32,
+        size: i64,
+        usage: u32,
+        bound_buffer: Option<DomRoot<WebGLBuffer>>,
+    ) {
+        let bound_buffer =
+            handle_potential_webgl_error!(self, bound_buffer.ok_or(InvalidOperation), return);
+
+        if size < 0 {
+            return self.webgl_error(InvalidValue);
+        }
+
+        // FIXME: Allocating a buffer based on user-requested size is
+        // not great, but we don't have a fallible allocation to try.
+        let data = vec![0u8; size as usize];
+        handle_potential_webgl_error!(self, bound_buffer.buffer_data(target, &data, usage));
+    }
+
+    pub fn bind_buffer_maybe(
+        &self,
+        slot: &MutNullableDom<WebGLBuffer>,
+        target: u32,
+        buffer: Option<&WebGLBuffer>,
+    ) {
+        if let Some(buffer) = buffer {
+            handle_potential_webgl_error!(self, self.validate_ownership(buffer), return);
+
+            if buffer.is_marked_for_deletion() {
+                return self.webgl_error(InvalidOperation);
+            }
+            handle_potential_webgl_error!(self, buffer.set_target_maybe(target), return);
+            buffer.increment_attached_counter();
+        }
+
+        self.send_command(WebGLCommand::BindBuffer(target, buffer.map(|b| b.id())));
+        if let Some(old) = slot.get() {
+            old.decrement_attached_counter();
+        }
+
+        slot.set(buffer);
     }
 }
 
@@ -1587,10 +1657,6 @@ impl WebGLRenderingContextMethods for WebGLRenderingContext {
 
     // https://www.khronos.org/registry/webgl/specs/latest/1.0/#5.14.5
     fn BindBuffer(&self, target: u32, buffer: Option<&WebGLBuffer>) {
-        if let Some(buffer) = buffer {
-            handle_potential_webgl_error!(self, self.validate_ownership(buffer), return);
-        }
-
         let current_vao;
         let slot = match target {
             constants::ARRAY_BUFFER => &self.bound_buffer_array,
@@ -1600,19 +1666,7 @@ impl WebGLRenderingContextMethods for WebGLRenderingContext {
             },
             _ => return self.webgl_error(InvalidEnum),
         };
-
-        if let Some(buffer) = buffer {
-            if buffer.is_marked_for_deletion() {
-                return self.webgl_error(InvalidOperation);
-            }
-            handle_potential_webgl_error!(self, buffer.set_target(target), return);
-            buffer.increment_attached_counter();
-        }
-        self.send_command(WebGLCommand::BindBuffer(target, buffer.map(|b| b.id())));
-        if let Some(old) = slot.get() {
-            old.decrement_attached_counter();
-        }
-        slot.set(buffer);
+        self.bind_buffer_maybe(&slot, target, buffer);
     }
 
     // https://www.khronos.org/registry/webgl/specs/latest/1.0/#5.14.6
@@ -1703,38 +1757,15 @@ impl WebGLRenderingContextMethods for WebGLRenderingContext {
     }
 
     // https://www.khronos.org/registry/webgl/specs/latest/1.0/#5.14.5
-    #[allow(unsafe_code)]
     fn BufferData(&self, target: u32, data: Option<ArrayBufferViewOrArrayBuffer>, usage: u32) {
-        let data = handle_potential_webgl_error!(self, data.ok_or(InvalidValue), return);
-
         let bound_buffer = handle_potential_webgl_error!(self, self.bound_buffer(target), return);
-        let bound_buffer =
-            handle_potential_webgl_error!(self, bound_buffer.ok_or(InvalidOperation), return);
-
-        let data = unsafe {
-            // Safe because we don't do anything with JS until the end of the method.
-            match data {
-                ArrayBufferViewOrArrayBuffer::ArrayBuffer(ref data) => data.as_slice(),
-                ArrayBufferViewOrArrayBuffer::ArrayBufferView(ref data) => data.as_slice(),
-            }
-        };
-        handle_potential_webgl_error!(self, bound_buffer.buffer_data(data, usage));
+        self.buffer_data(target, data, usage, bound_buffer)
     }
 
     // https://www.khronos.org/registry/webgl/specs/latest/1.0/#5.14.5
     fn BufferData_(&self, target: u32, size: i64, usage: u32) {
         let bound_buffer = handle_potential_webgl_error!(self, self.bound_buffer(target), return);
-        let bound_buffer =
-            handle_potential_webgl_error!(self, bound_buffer.ok_or(InvalidOperation), return);
-
-        if size < 0 {
-            return self.webgl_error(InvalidValue);
-        }
-
-        // FIXME: Allocating a buffer based on user-requested size is
-        // not great, but we don't have a fallible allocation to try.
-        let data = vec![0u8; size as usize];
-        handle_potential_webgl_error!(self, bound_buffer.buffer_data(&data, usage));
+        self.buffer_data_(target, size, usage, bound_buffer)
     }
 
     // https://www.khronos.org/registry/webgl/specs/latest/1.0/#5.14.5
