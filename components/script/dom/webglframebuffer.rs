@@ -6,6 +6,7 @@
 use crate::dom::bindings::cell::DomRefCell;
 use crate::dom::bindings::codegen::Bindings::WebGLFramebufferBinding;
 use crate::dom::bindings::codegen::Bindings::WebGLRenderingContextBinding::WebGLRenderingContextConstants as constants;
+use crate::dom::bindings::codegen::Bindings::WebGL2RenderingContextBinding::WebGL2RenderingContextBinding::WebGL2RenderingContextConstants as constants2;
 use crate::dom::bindings::inheritance::Castable;
 use crate::dom::bindings::reflector::{reflect_dom_object, DomObject};
 use crate::dom::bindings::root::{Dom, DomRoot};
@@ -132,6 +133,17 @@ impl WebGLFramebuffer {
 impl WebGLFramebuffer {
     pub fn id(&self) -> WebGLFramebufferId {
         self.id
+    }
+
+    pub fn has_attachment(&self) -> bool {
+        if self.color.borrow().is_none() &&
+            self.depth.borrow().is_none() &&
+            self.stencil.borrow().is_none() &&
+            self.depthstencil.borrow().is_none() {
+                true
+        } else {
+            false
+        }
     }
 
     pub fn bind(&self, target: u32) {
@@ -364,7 +376,7 @@ impl WebGLFramebuffer {
         attachment: u32,
     ) -> Option<&DomRefCell<Option<WebGLFramebufferAttachment>>> {
         match attachment {
-            constants::COLOR_ATTACHMENT0 => Some(&self.color),
+            constants::COLOR_ATTACHMENT0 ..= constants2::COLOR_ATTACHMENT15 => Some(&self.color),
             constants::DEPTH_ATTACHMENT => Some(&self.depth),
             constants::STENCIL_ATTACHMENT => Some(&self.stencil),
             constants::DEPTH_STENCIL_ATTACHMENT => Some(&self.depthstencil),
@@ -423,14 +435,17 @@ impl WebGLFramebuffer {
 
     pub fn texture2d(
         &self,
+        target: u32,
         attachment: u32,
         textarget: u32,
         texture: Option<&WebGLTexture>,
         level: i32,
     ) -> WebGLResult<()> {
-        let binding = self
-            .attachment_binding(attachment)
-            .ok_or(WebGLError::InvalidEnum)?;
+        let binding = match self.attachment_binding(attachment) {
+            Some(a) => a,
+            None => return Result::Err(WebGLError::InvalidEnum),
+        };
+            /* .ok_or(WebGLError::InvalidEnum)?; */
 
         let tex_id = match texture {
             // Note, from the GLES 2.0.25 spec, page 113:
@@ -441,7 +456,8 @@ impl WebGLFramebuffer {
                 //     "level specifies the mipmap level of the texture image
                 //      to be attached to the framebuffer and must be
                 //      0. Otherwise, INVALID_VALUE is generated."
-                if level != 0 {
+                // size of texute webgl2
+                if level > 14 {//TODO REMOVE HACK
                     return Err(WebGLError::InvalidValue);
                 }
 
@@ -490,7 +506,7 @@ impl WebGLFramebuffer {
         self.upcast::<WebGLObject>()
             .context()
             .send_command(WebGLCommand::FramebufferTexture2D(
-                constants::FRAMEBUFFER,
+                target,
                 attachment,
                 textarget,
                 tex_id,

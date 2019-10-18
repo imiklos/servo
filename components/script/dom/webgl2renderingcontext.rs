@@ -20,7 +20,7 @@ use crate::dom::htmlcanvaselement::HTMLCanvasElement;
 use crate::dom::htmliframeelement::HTMLIFrameElement;
 use crate::dom::webglactiveinfo::WebGLActiveInfo;
 use crate::dom::webglbuffer::WebGLBuffer;
-use crate::dom::webglframebuffer::WebGLFramebuffer;
+use crate::dom::webglframebuffer::{WebGLFramebuffer, WebGLFramebufferAttachmentRoot};
 use crate::dom::webglprogram::WebGLProgram;
 use crate::dom::webglquery::WebGLQuery;
 use crate::dom::webglrenderbuffer::WebGLRenderbuffer;
@@ -35,9 +35,9 @@ use crate::dom::webgltexture::WebGLTexture;
 use crate::dom::webgluniformlocation::WebGLUniformLocation;
 use crate::dom::window::Window;
 use crate::script_runtime::JSContext;
-use canvas_traits::webgl::WebGLError::*;
+use canvas_traits::webgl::WebGLError::{self, *};
 /// https://www.khronos.org/registry/webgl/specs/latest/2.0/webgl.idl
-use canvas_traits::webgl::{webgl_channel, GLContextAttributes, WebGLCommand, WebGLVersion};
+use canvas_traits::webgl::{webgl_channel, GLContextAttributes, WebGLCommand, WebGLVersion, WebGLResult};
 use dom_struct::dom_struct;
 use euclid::default::Size2D;
 use js::jsapi::JSObject;
@@ -54,6 +54,7 @@ pub struct WebGL2RenderingContext {
     occlusion_query: MutNullableDom<WebGLQuery>,
     primitives_query: MutNullableDom<WebGLQuery>,
     samplers: Box<[MutNullableDom<WebGLSampler>]>,
+    bound_read_framebuffer: MutNullableDom<WebGLFramebuffer>
 }
 
 impl WebGL2RenderingContext {
@@ -76,6 +77,7 @@ impl WebGL2RenderingContext {
             occlusion_query: MutNullableDom::new(None),
             primitives_query: MutNullableDom::new(None),
             samplers: samplers,
+            bound_read_framebuffer: MutNullableDom::new(None),
         })
     }
 
@@ -99,6 +101,55 @@ impl WebGL2RenderingContext {
 
     pub fn base_context(&self) -> DomRoot<WebGLRenderingContext> {
         DomRoot::from_ref(&*self.base)
+    }
+
+    pub fn bound_read_framebuffer(&self) -> Option<DomRoot<WebGLFramebuffer>> {
+        self.bound_read_framebuffer.get()
+    }
+
+    pub fn ValidateGetFramebufferAttachmentParameter(&self, cx: JSContext, target: u32, attachment: u32) -> WebGLResult<()> {
+        fn match_attachment(ctx: &WebGLRenderingContext, fb: Option<DomRoot<WebGLFramebuffer>>, attachment: u32, cx: JSContext) -> WebGLResult<()> {
+            match attachment {
+                constants::COLOR_ATTACHMENT0 ..= constants::COLOR_ATTACHMENT15 => {
+                    let max = ctx.GetParameter(cx, constants::MAX_COLOR_ATTACHMENTS);//TODO: getparameterint to gl_limits
+                    if attachment < (constants::COLOR_ATTACHMENT0 + (max.to_int32() as u32)) {
+                        return  Ok(());
+                    } else {
+                        return Result::Err(WebGLError::InvalidEnum);
+                    }
+                },
+                constants::DEPTH_ATTACHMENT |
+                constants::STENCIL_ATTACHMENT => return Ok(()),
+                constants::DEPTH_STENCIL_ATTACHMENT => {
+                    match fb {
+                        Some(fb) => {
+                            if fb.attachment(attachment).is_none() { // .has_attachment(dept_stenc)
+                                return Result::Err(WebGLError::InvalidOperation);
+                            } else {
+                                return Ok(());
+                            };
+                        },
+                        None => return Result::Err(WebGLError::InvalidOperation),
+                    };
+                },
+                _ => return Result::Err(WebGLError::InvalidEnum),
+            };
+        }
+
+        match target {
+            constants::READ_FRAMEBUFFER => match_attachment(&self.base, self.bound_read_framebuffer(), attachment, cx),
+            constants::DRAW_FRAMEBUFFER |
+            constants::FRAMEBUFFER => match self.base.bound_framebuffer() {
+                Some(fb) => match_attachment(&self.base, self.base.bound_framebuffer(), attachment, cx),
+                None => match attachment {
+                    constants::DEPTH |
+                    constants::STENCIL |
+                    constants::BACK => return Ok(()),
+                    _ => return Result::Err(WebGLError::InvalidEnum),
+                },
+            },
+            _ => Result::Err(WebGLError::InvalidEnum),
+        }
     }
 }
 
@@ -146,6 +197,22 @@ impl WebGL2RenderingContextMethods for WebGL2RenderingContext {
                 let sampler = self.samplers[idx].get();
                 optional_root_object_to_js_or_null!(*cx, sampler)
             },
+            constants::READ_FRAMEBUFFER_BINDING => {
+                unsafe {
+                    optional_root_object_to_js_or_null!(
+                        *cx,
+                        self.bound_read_framebuffer()
+                    )
+                }
+            },
+            constants::FRAMEBUFFER_BINDING => {
+                unsafe {
+                    optional_root_object_to_js_or_null!(
+                        *cx,
+                        self.base.bound_framebuffer()
+                    )
+                }
+            },
             _ => self.base.GetParameter(cx, parameter),
         }
     }
@@ -183,8 +250,173 @@ impl WebGL2RenderingContextMethods for WebGL2RenderingContext {
         attachment: u32,
         pname: u32,
     ) -> JSVal {
-        self.base
-            .GetFramebufferAttachmentParameter(cx, target, attachment, pname)
+        // Validate target, attachment parameters
+        handle_potential_webgl_error!(
+            self.base,
+            self.ValidateGetFramebufferAttachmentParameter(cx, target, attachment),
+            return NullValue()
+        );
+        let fb = match target {
+            constants::READ_FRAMEBUFFER => self.bound_read_framebuffer(),
+            constants::DRAW_FRAMEBUFFER |
+            constants::FRAMEBUFFER => self.base.bound_framebuffer(),
+            _ => panic!("SH"),
+        };
+
+        match fb {
+            Some(fb) => match fb.attachment(attachment) {
+                Some(WebGLFramebufferAttachmentRoot::Renderbuffer(rb)) => match pname {
+                    constants::FRAMEBUFFER_ATTACHMENT_OBJECT_TYPE => Int32Value(constants::RENDERBUFFER as i32),
+                    constants::FRAMEBUFFER_ATTACHMENT_OBJECT_NAME => Int32Value(rb.id().get() as i32),
+                    constants::FRAMEBUFFER_ATTACHMENT_COMPONENT_TYPE => {
+/*                         if attachment == constants::DEPTH_STENCIL_ATTACHMENT {
+                            self.base.webgl_error(InvalidOperation);
+                            NullValue()
+                        } */
+                        if fb.has_attachment() {
+                            std::dbg!(println!("FETCH OPENGL"));
+                            let (sender, receiver) = webgl_channel().unwrap();
+                            self.base.send_command(WebGLCommand::GetFramebufferAttachmentParameter(
+                                target, attachment, pname, sender,
+                            ));
+
+                            Int32Value(receiver.recv().unwrap())
+                        } else {
+                            std::dbg!(println!("FETCH OPENGL HELYETT INVALID OPER"));
+                            self.base.webgl_error(InvalidOperation);
+                            NullValue()
+                        }
+                    },
+                    constants::FRAMEBUFFER_ATTACHMENT_COLOR_ENCODING => Int32Value(constants::LINEAR as i32),
+                    constants::FRAMEBUFFER_ATTACHMENT_RED_SIZE |
+                    constants::FRAMEBUFFER_ATTACHMENT_GREEN_SIZE |
+                    constants::FRAMEBUFFER_ATTACHMENT_BLUE_SIZE |
+                    constants::FRAMEBUFFER_ATTACHMENT_ALPHA_SIZE |
+                    constants::FRAMEBUFFER_ATTACHMENT_DEPTH_SIZE |
+                    constants::FRAMEBUFFER_ATTACHMENT_STENCIL_SIZE => {
+                        if fb.has_attachment() {
+                            std::dbg!(println!("FETCH OPENGL"));
+                            let (sender, receiver) = webgl_channel().unwrap();
+                            self.base.send_command(WebGLCommand::GetFramebufferAttachmentParameter(
+                                target, attachment, pname, sender,
+                            ));
+
+                            Int32Value(receiver.recv().unwrap())
+                        } else {
+                            std::dbg!(println!("FETCH OPENGL HELYETT INVALID OPER"));
+                            self.base.webgl_error(InvalidOperation);
+                            NullValue()
+                        }
+                    },
+                    _ => { // invalid pname
+                        self.base.webgl_error(InvalidEnum);
+                        NullValue()
+                    },
+                },
+                Some(WebGLFramebufferAttachmentRoot::Texture(tex)) => match pname {
+                    constants::FRAMEBUFFER_ATTACHMENT_OBJECT_TYPE => Int32Value(constants::TEXTURE as i32),
+                    constants::FRAMEBUFFER_ATTACHMENT_OBJECT_NAME => Int32Value(tex.id().get() as i32),
+                    constants::FRAMEBUFFER_ATTACHMENT_COMPONENT_TYPE => {
+                        if attachment == constants::DEPTH_STENCIL_ATTACHMENT {
+                            self.base.webgl_error(InvalidOperation);
+                            NullValue()
+                        } else if fb.has_attachment() {
+                            std::dbg!(println!("FETCH OPENGL"));
+                            let (sender, receiver) = webgl_channel().unwrap();
+                            self.base.send_command(WebGLCommand::GetFramebufferAttachmentParameter(
+                                target, attachment, pname, sender,
+                            ));
+
+                            Int32Value(receiver.recv().unwrap())
+                        } else {
+                            std::dbg!(println!("FETCH OPENGL HELYETT INVALID OPER"));
+                            self.base.webgl_error(InvalidOperation);
+                            NullValue()
+                        }
+                    },
+                    constants::FRAMEBUFFER_ATTACHMENT_COLOR_ENCODING => Int32Value(constants::SRGB as i32),
+                    constants::FRAMEBUFFER_ATTACHMENT_TEXTURE_CUBE_MAP_FACE |
+                    constants::FRAMEBUFFER_ATTACHMENT_TEXTURE_LAYER |
+                    constants::FRAMEBUFFER_ATTACHMENT_TEXTURE_LEVEL |
+                    constants::FRAMEBUFFER_ATTACHMENT_RED_SIZE |
+                    constants::FRAMEBUFFER_ATTACHMENT_GREEN_SIZE |
+                    constants::FRAMEBUFFER_ATTACHMENT_BLUE_SIZE |
+                    constants::FRAMEBUFFER_ATTACHMENT_ALPHA_SIZE |
+                    constants::FRAMEBUFFER_ATTACHMENT_DEPTH_SIZE |
+                    constants::FRAMEBUFFER_ATTACHMENT_STENCIL_SIZE => {
+                        if fb.has_attachment() {
+                            std::dbg!(println!("FETCH OPENGL"));
+                            let (sender, receiver) = webgl_channel().unwrap();
+                            self.base.send_command(WebGLCommand::GetFramebufferAttachmentParameter(
+                                target, attachment, pname, sender,
+                            ));
+
+                            Int32Value(receiver.recv().unwrap())
+                        } else {
+                            std::dbg!(println!("FETCH OPENGL HELYETT INVALID OPER"));
+                            self.base.webgl_error(InvalidOperation);
+                            NullValue()
+                        }
+                    },
+                    _ => { //pname invalid
+                        self.base.webgl_error(InvalidEnum);
+                        NullValue()
+                    },
+                },
+                None => match pname {
+                    constants::FRAMEBUFFER_ATTACHMENT_OBJECT_TYPE => Int32Value(constants::NONE as i32),
+                    constants::FRAMEBUFFER_ATTACHMENT_OBJECT_NAME => NullValue(),
+                    _ => {
+                        std::dbg!(println!("ITT")); 
+                        self.base.webgl_error(InvalidOperation);
+                        NullValue()
+                    }
+                },
+            },
+            None => match attachment {
+                constants::DEPTH | constants::STENCIL => match pname {
+                    constants::FRAMEBUFFER_ATTACHMENT_OBJECT_TYPE => Int32Value(constants::NONE as i32),
+                    _ => {
+                        self.base.webgl_error(InvalidOperation);
+                        NullValue()
+                    }
+                },
+                _ => match pname {
+                    constants::FRAMEBUFFER_ATTACHMENT_OBJECT_TYPE => Int32Value(constants::FRAMEBUFFER_DEFAULT as i32),
+                    constants::FRAMEBUFFER_ATTACHMENT_RED_SIZE |
+                    constants::FRAMEBUFFER_ATTACHMENT_BLUE_SIZE |
+                    constants::FRAMEBUFFER_ATTACHMENT_GREEN_SIZE => match attachment {
+                        constants::BACK => Int32Value(8),
+                        _ => Int32Value(0)
+                    },
+                    constants::FRAMEBUFFER_ATTACHMENT_ALPHA_SIZE => match attachment {
+                        /* constants::BACK => {
+                            if fb.has_color() {
+                                Int32Value(8)
+                            } else {
+                                Int32Value(0)
+                            }
+                        }, */
+                        constants::BACK => Int32Value(8),
+                        _ => Int32Value(0)
+                    },
+                    constants::FRAMEBUFFER_ATTACHMENT_DEPTH_SIZE => match attachment {
+                        constants::BACK => Int32Value(24),
+                        _ => Int32Value(0)
+                    },
+                    constants::FRAMEBUFFER_ATTACHMENT_STENCIL_SIZE => match attachment {
+                        constants::STENCIL => Int32Value(8),
+                        _ => Int32Value(0)
+                    },
+                    constants::FRAMEBUFFER_ATTACHMENT_COMPONENT_TYPE => Int32Value(constants::UNSIGNED_NORMALIZED as i32),
+                    constants::FRAMEBUFFER_ATTACHMENT_COLOR_ENCODING => Int32Value(constants::LINEAR as i32),
+                    _ => {
+                        self.base.webgl_error(InvalidEnum);
+                        NullValue()
+                    }
+                },
+            },
+        }
     }
 
     /// https://www.khronos.org/registry/webgl/specs/latest/1.0/#5.14.7
@@ -245,7 +477,19 @@ impl WebGL2RenderingContextMethods for WebGL2RenderingContext {
 
     /// https://www.khronos.org/registry/webgl/specs/latest/1.0/#5.14.6
     fn BindFramebuffer(&self, target: u32, framebuffer: Option<&WebGLFramebuffer>) {
-        self.base.BindFramebuffer(target, framebuffer)
+        if let Some(fb) = framebuffer {
+            handle_potential_webgl_error!(self.base, self.base.validate_ownership(fb), return);
+        }
+
+        match target {
+            constants::FRAMEBUFFER => {
+                self.base.bind_framebuffer(target, framebuffer, self.base.bound_framebuffer_as_dom());
+                self.base.bind_framebuffer(target, framebuffer, &self.bound_read_framebuffer);
+            }
+            constants::DRAW_FRAMEBUFFER => self.base.bind_framebuffer(target, framebuffer, self.base.bound_framebuffer_as_dom()),
+            constants::READ_FRAMEBUFFER => self.base.bind_framebuffer(target, framebuffer, &self.bound_read_framebuffer),
+            _ => self.base.webgl_error(InvalidEnum),
+        };
     }
 
     /// https://www.khronos.org/registry/webgl/specs/latest/1.0/#5.14.7
@@ -1003,9 +1247,20 @@ impl WebGL2RenderingContextMethods for WebGL2RenderingContext {
         self.base.TexParameteri(target, name, value)
     }
 
-    /// https://www.khronos.org/registry/webgl/specs/latest/1.0/#5.14.6
+    /// https://www.khronos.org/registry/webgl/specs/latest/2.0/#3.7.4
     fn CheckFramebufferStatus(&self, target: u32) -> u32 {
-        self.base.CheckFramebufferStatus(target)
+        match target {
+            constants::FRAMEBUFFER | constants::READ_FRAMEBUFFER | constants::DRAW_FRAMEBUFFER => {}
+            _ => {
+                self.base.webgl_error(InvalidEnum);
+                return 0;
+            }
+        }
+        match self.base.bound_framebuffer() {
+            Some(fb) => return fb.check_status(),
+            None => return constants::FRAMEBUFFER_COMPLETE,
+        }
+        //self.base.CheckFramebufferStatus(target)
     }
 
     /// https://www.khronos.org/registry/webgl/specs/latest/1.0/#5.14.7
@@ -1022,8 +1277,28 @@ impl WebGL2RenderingContextMethods for WebGL2RenderingContext {
         renderbuffertarget: u32,
         rb: Option<&WebGLRenderbuffer>,
     ) {
-        self.base
-            .FramebufferRenderbuffer(target, attachment, renderbuffertarget, rb)
+        if let Some(rb) = rb {
+            handle_potential_webgl_error!(self.base, self.base.validate_ownership(rb), return);
+        }
+
+        if renderbuffertarget != constants::RENDERBUFFER {
+            return self.base.webgl_error(InvalidEnum)
+        }
+        match target {
+            constants::FRAMEBUFFER | constants::DRAW_FRAMEBUFFER => {
+                match self.base.bound_framebuffer() {
+                    Some(fb) => handle_potential_webgl_error!(self.base, fb.renderbuffer(attachment, rb)),
+                    None => self.base.webgl_error(InvalidOperation),
+                };
+            },
+            constants::READ_FRAMEBUFFER => {
+                match self.bound_read_framebuffer() {
+                    Some(fb) => handle_potential_webgl_error!(self.base, fb.renderbuffer(attachment, rb)),
+                    None => self.base.webgl_error(InvalidOperation),
+                };
+            },
+            _ => return self.base.webgl_error(InvalidEnum),
+        };
     }
 
     /// https://www.khronos.org/registry/webgl/specs/latest/1.0/#5.14.6
@@ -1035,8 +1310,32 @@ impl WebGL2RenderingContextMethods for WebGL2RenderingContext {
         texture: Option<&WebGLTexture>,
         level: i32,
     ) {
-        self.base
-            .FramebufferTexture2D(target, attachment, textarget, texture, level)
+        if let Some(texture) = texture {
+            handle_potential_webgl_error!(self.base, self.base.validate_ownership(texture), return);
+        }
+
+        match target {
+            constants::DRAW_FRAMEBUFFER |
+            constants::FRAMEBUFFER => {
+                match self.base.bound_framebuffer() {
+                    Some(fb) => handle_potential_webgl_error!(
+                        self.base,
+                        fb.texture2d(target, attachment, textarget, texture, level)
+                    ),
+                    None => self.base.webgl_error(InvalidOperation),
+                };
+            },
+            constants::READ_FRAMEBUFFER => {
+                match self.bound_read_framebuffer() {
+                    Some(fb) => handle_potential_webgl_error!(
+                        self.base,
+                        fb.texture2d(target, attachment, textarget, texture, level)
+                    ),
+                    None => self.base.webgl_error(InvalidOperation),
+                };
+            },
+            _ => self.base.webgl_error(InvalidEnum),
+        }
     }
 
     /// https://www.khronos.org/registry/webgl/specs/latest/1.0/#5.14.9

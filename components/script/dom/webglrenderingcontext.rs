@@ -1086,6 +1086,11 @@ impl WebGLRenderingContext {
         self.bound_framebuffer.get()
     }
 
+    pub fn bound_framebuffer_as_dom(&self) -> &MutNullableDom<WebGLFramebuffer> {
+        &self.bound_framebuffer
+    }
+
+
     pub fn bound_renderbuffer(&self) -> Option<DomRoot<WebGLRenderbuffer>> {
         self.bound_renderbuffer.get()
     }
@@ -1096,6 +1101,28 @@ impl WebGLRenderingContext {
 
     pub fn formats(&self) -> &GLFormats {
         &self.framebuffer_format
+    }
+
+    pub fn bind_framebuffer(&self, target: u32, framebuffer: Option<&WebGLFramebuffer>, setframebuffer: &MutNullableDom<WebGLFramebuffer>) {
+        if let Some(framebuffer) = framebuffer {
+            if framebuffer.is_deleted() {
+                // From the WebGL spec:
+                //
+                //     "An attempt to bind a deleted framebuffer will
+                //      generate an INVALID_OPERATION error, and the
+                //      current binding will remain untouched."
+                return self.webgl_error(InvalidOperation);
+            } else {
+                framebuffer.bind(target);
+                setframebuffer.set(Some(framebuffer));
+            }
+        } else {
+            // Bind the default framebuffer
+            let cmd =
+                WebGLCommand::BindFramebuffer(target, WebGLFramebufferBindingRequest::Default);
+            self.send_command(cmd);
+            setframebuffer.set(framebuffer);
+        }
     }
 }
 
@@ -1625,25 +1652,7 @@ impl WebGLRenderingContextMethods for WebGLRenderingContext {
             return self.webgl_error(InvalidEnum);
         }
 
-        if let Some(framebuffer) = framebuffer {
-            if framebuffer.is_deleted() {
-                // From the WebGL spec:
-                //
-                //     "An attempt to bind a deleted framebuffer will
-                //      generate an INVALID_OPERATION error, and the
-                //      current binding will remain untouched."
-                return self.webgl_error(InvalidOperation);
-            } else {
-                framebuffer.bind(target);
-                self.bound_framebuffer.set(Some(framebuffer));
-            }
-        } else {
-            // Bind the default framebuffer
-            let cmd =
-                WebGLCommand::BindFramebuffer(target, WebGLFramebufferBindingRequest::Default);
-            self.send_command(cmd);
-            self.bound_framebuffer.set(framebuffer);
-        }
+        self.bind_framebuffer(target, framebuffer, self.bound_framebuffer_as_dom());
     }
 
     // https://www.khronos.org/registry/webgl/specs/latest/1.0/#5.14.7
@@ -4124,7 +4133,7 @@ impl WebGLRenderingContextMethods for WebGLRenderingContext {
         match self.bound_framebuffer.get() {
             Some(fb) => handle_potential_webgl_error!(
                 self,
-                fb.texture2d(attachment, textarget, texture, level)
+                fb.texture2d(target, attachment, textarget, texture, level)
             ),
             None => self.webgl_error(InvalidOperation),
         };

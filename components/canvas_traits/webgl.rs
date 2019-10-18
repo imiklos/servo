@@ -720,6 +720,9 @@ parameters! {
             StencilValueMask = gl::STENCIL_VALUE_MASK,
             StencilWritemask = gl::STENCIL_WRITEMASK,
             SubpixelBits = gl::SUBPIXEL_BITS,
+            DrawFramebufferBinding = gl::DRAW_FRAMEBUFFER_BINDING,
+            ReadFramebufferBinding = gl::READ_FRAMEBUFFER_BINDING,
+            MaxColorAttachments = gl::MAX_COLOR_ATTACHMENTS,
         }),
         Int2(ParameterInt2 {
             MaxViewportDims = gl::MAX_VIEWPORT_DIMS,
