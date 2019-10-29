@@ -150,16 +150,11 @@ impl WebGL2RenderingContextMethods for WebGL2RenderingContext {
                 let sampler = self.samplers[idx].get();
                 optional_root_object_to_js_or_null!(*cx, sampler)
             },
-            constants::TRANSFORM_FEEDBACK_BINDING => {
-                let id = self.base.GetParameter(cx, parameter).to_int32();
-                rooted!(in(*cx) let mut rval = NullValue());
-                if id == 0 { return rval };
-                let _ = unsafe {
-                    if let Some(tf) = self.current_transform_feedback.get() {
-                        tf.to_jsval(*cx, rval.handle_mut())
-                    }
-                };
-                rval.get()
+            constants::TRANSFORM_FEEDBACK_BINDING => unsafe {
+                optional_root_object_to_js_or_null!(
+                    *cx,
+                    self.current_transform_feedback.get()
+                )
             },
             _ => self.base.GetParameter(cx, parameter),
         }
@@ -1435,6 +1430,7 @@ impl WebGL2RenderingContextMethods for WebGL2RenderingContext {
             },
         }
     }
+
     fn CreateTransformFeedback(&self) -> Option<DomRoot<WebGLTransformFeedback>> {
         Some(WebGLTransformFeedback::new(&self.base))
     }
@@ -1442,6 +1438,10 @@ impl WebGL2RenderingContextMethods for WebGL2RenderingContext {
     fn DeleteTransformFeedback(&self, tf: Option<&WebGLTransformFeedback>) {
         if let Some(tf) = tf {
             handle_potential_webgl_error!(self.base, self.base.validate_ownership(tf), return);
+            if tf.is_active() {
+                self.base.webgl_error(InvalidOperation);
+                return;
+            }
             tf.delete(false);
             self.current_transform_feedback.set(None);
         }
@@ -1483,6 +1483,7 @@ impl WebGL2RenderingContextMethods for WebGL2RenderingContext {
             transform_feedback.bind(&self.base, target);
             self.current_transform_feedback.set(Some(transform_feedback));
         }
+        //match None too
     }
 
     fn BeginTransformFeedback(&self, primitiveMode: u32) {
@@ -1552,7 +1553,7 @@ impl WebGL2RenderingContextMethods for WebGL2RenderingContext {
     fn TransformFeedbackVaryings(&self, program: &WebGLProgram, varyings: Vec<DOMString>, bufferMode: u32) {
         handle_potential_webgl_error!(self.base, program.validate(), return);
         let strs = varyings.iter().map(|name| {
-            name.get_str()
+            String::from(&*name.to_owned())
         }).collect::<Vec<String>>();
         match bufferMode {
             constants::INTERLEAVED_ATTRIBS => self.base.send_command(WebGLCommand::TransformFeedbackVaryings(program.id(), strs, bufferMode)),

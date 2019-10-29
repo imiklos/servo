@@ -204,11 +204,6 @@ impl DOMString {
         self.0.push_str(string)
     }
 
-    /// get as String
-    pub fn get_str(&self) -> String {
-        self.0.clone()
-    }
-
     /// Clears this `DOMString`, removing all contents.
     pub fn clear(&mut self) {
         self.0.clear()

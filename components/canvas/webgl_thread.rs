@@ -1154,8 +1154,7 @@ impl WebGLImpl {
                 sender.send((size, ty, name)).unwrap();
             },
             WebGLCommand::TransformFeedbackVaryings(program, ref varyings, buffer_mode) => {
-                let mut cl = varyings.clone();
-                let c_varyings = cl.iter_mut().map(|varying| {
+                let c_varyings = varyings.iter().map(|varying| {
                     std::ffi::CString::new(varying.as_str()).unwrap()
                 }).collect::<Vec<_>>();
                 ctx.gl().transform_feedback_varyings(program.get(), c_varyings.as_slice(), buffer_mode);
