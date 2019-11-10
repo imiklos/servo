@@ -2104,7 +2104,7 @@ where
 
         if let Some(webgpu) = self.webgpu.as_ref() {
             debug!("Exiting WebGPU thread.");
-            let (sender, receiver) = ipc::channel().expect("Failed to create IPC channel!");
+            let (sender, receiver) = ipc::channel().unwrap();
             if let Err(e) = webgpu.exit(sender) {
                 warn!("Exit WebGPU Thread failed ({})", e);
             }
