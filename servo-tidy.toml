@@ -27,6 +27,7 @@ rand = [
 [ignore]
 # Ignored packages with duplicated versions
 packages = [
+  "arrayvec",
   "cgl",
   "cocoa",
   "gl_generator", # https://github.com/servo/servo/pull/23288#issuecomment-494687746
