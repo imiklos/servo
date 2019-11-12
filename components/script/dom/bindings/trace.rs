@@ -144,7 +144,11 @@ use tendril::stream::LossyDecoder;
 use tendril::{StrTendril, TendrilSink};
 use time::{Duration, Timespec};
 use uuid::Uuid;
+<<<<<<< HEAD
 use webgpu::{WebGPU, WebGPUAdapter};
+=======
+use webgpu::{WebGPUAdapter, WebGPUThread, WebGPUDevice};
+>>>>>>> 1a30d91f45... WebGPU impl
 use webrender_api::{DocumentId, ImageKey, RenderApiSender};
 use webvr_traits::{WebVRGamepadData, WebVRGamepadHand, WebVRGamepadState};
 use webxr_api::SwapChainId as WebXRSwapChainId;

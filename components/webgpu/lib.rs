@@ -12,13 +12,13 @@ pub extern crate wgpu_native as wgpu;
 use ipc_channel::ipc::{self, IpcReceiver, IpcSender};
 use malloc_size_of::{MallocSizeOf, MallocSizeOfOps};
 use servo_config::pref;
-use wgpu::adapter_get_info;
+use wgpu::{adapter_get_info, adapter_request_device};
 use wgpu::TypedId;
 
 #[derive(Debug, Deserialize, Serialize)]
 pub enum WebGPUResponse {
     RequestAdapter(String, WebGPUAdapter),
-    RequestDevice,
+    RequestDevice(WebGPUDevice, wgpu::DeviceDescriptor),
 }
 
 pub type WebGPUResponseResult = Result<WebGPUResponse, String>;
@@ -26,8 +26,17 @@ pub type WebGPUResponseResult = Result<WebGPUResponse, String>;
 #[derive(Debug, Deserialize, Serialize)]
 pub enum WebGPURequest {
     RequestAdapter(IpcSender<WebGPUResponseResult>, wgpu::RequestAdapterOptions),
+<<<<<<< HEAD
     RequestDevice,
     Exit(IpcSender<()>),
+=======
+    RequestDevice(
+        IpcSender<WebGPUResponseResult>,
+        WebGPUAdapter,
+        wgpu::DeviceDescriptor,
+    ),
+    Exit,
+>>>>>>> 1a30d91f45... WebGPU impl
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -129,6 +138,7 @@ impl WGPU {
                         )
                     }
                 },
+<<<<<<< HEAD
                 WebGPURequest::RequestDevice => {},
                 WebGPURequest::Exit(sender) => {
                     self.deinit();
@@ -136,6 +146,21 @@ impl WGPU {
                         warn!("Failed to send response to WebGPURequest::Exit ({})", e)
                     }
                     return;
+=======
+                WebGPURequest::RequestDevice(sender, adapter , options) => {
+                    let id = wgpu::Id::zip(0, 0, wgpu::Backend::Vulkan);
+                    let _output =
+                        gfx_select!(id => adapter_request_device(&self.global, adapter.0, &options, id));
+                    let device = WebGPUDevice(id);
+
+                    sender
+                        .send(Ok(WebGPUResponse::RequestDevice(device, options)))
+                        .expect("Failed to send response");
+                },
+                WebGPURequest::Exit => {
+                    self.deinit();
+                    return
+>>>>>>> 1a30d91f45... WebGPU impl
                 },
             }
         }
@@ -145,8 +170,13 @@ impl WGPU {
 #[derive(Clone, Copy, Debug, Deserialize, Serialize)]
 pub struct WebGPUAdapter(pub wgpu::AdapterId);
 
+<<<<<<< HEAD
 impl MallocSizeOf for WebGPUAdapter {
     fn size_of(&self, _ops: &mut MallocSizeOfOps) -> usize {
         0
     }
 }
+=======
+#[derive(Clone, Copy, Debug, Deserialize, Serialize)]
+pub struct WebGPUDevice(pub wgpu::DeviceId);
+>>>>>>> 1a30d91f45... WebGPU impl
