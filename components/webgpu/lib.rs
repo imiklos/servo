@@ -12,12 +12,12 @@ pub extern crate wgpu_native as wgpu;
 use ipc_channel::ipc::{self, IpcReceiver, IpcSender};
 use malloc_size_of::{MallocSizeOf, MallocSizeOfOps};
 use servo_config::pref;
-use wgpu::adapter_get_info;
+use wgpu::{adapter_get_info, adapter_request_device};
 
 #[derive(Debug, Deserialize, Serialize)]
 pub enum WebGPUResponse {
     RequestAdapter(String, WebGPUAdapter),
-    RequestDevice,
+    RequestDevice(WebGPUDevice, wgpu::DeviceDescriptor),
 }
 
 pub type WebGPUResponseResult = Result<WebGPUResponse, String>;
@@ -29,7 +29,12 @@ pub enum WebGPURequest {
         wgpu::RequestAdapterOptions,
         wgpu::AdapterId,
     ),
-    RequestDevice,
+    RequestDevice(
+        IpcSender<WebGPUResponseResult>,
+        WebGPUAdapter,
+        wgpu::DeviceDescriptor,
+        wgpu::DeviceId,
+    ),
     Exit(IpcSender<()>),
 }
 
@@ -124,14 +129,22 @@ impl WGPU {
                         )
                     }
                 },
-                WebGPURequest::RequestDevice => {},
+                WebGPURequest::RequestDevice(sender, adapter, options, id) => {
+                    let _output =
+                        gfx_select!(id => adapter_request_device(&self.global, adapter.0, &options, id));
+                    let device = WebGPUDevice(id);
+
+                    sender
+                        .send(Ok(WebGPUResponse::RequestDevice(device, options)))
+                        .expect("Failed to send response");
+                },
                 WebGPURequest::Exit(sender) => {
                     self.deinit();
                     if let Err(e) = sender.send(()) {
                         warn!("Failed to send response to WebGPURequest::Exit ({})", e)
                     }
                     return;
-                },
+            },
             }
         }
     }
@@ -145,3 +158,6 @@ impl MallocSizeOf for WebGPUAdapter {
         0
     }
 }
+
+#[derive(Clone, Copy, Debug, Deserialize, Serialize)]
+pub struct WebGPUDevice(pub wgpu::DeviceId);
