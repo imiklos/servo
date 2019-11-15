@@ -18,6 +18,8 @@ use wgpu::{adapter_get_info, adapter_request_device};
 pub enum WebGPUResponse {
     RequestAdapter(String, WebGPUAdapter),
     RequestDevice(WebGPUDevice, wgpu::DeviceDescriptor),
+    MapReadAsync,
+    MapWriteAsync,
 }
 
 pub type WebGPUResponseResult = Result<WebGPUResponse, String>;
@@ -36,6 +38,8 @@ pub enum WebGPURequest {
         wgpu::DeviceId,
     ),
     Exit(IpcSender<()>),
+    MapReadAsync,
+    MapWriteAsync,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -141,13 +145,14 @@ impl WGPU {
                         )
                     }
                 },
+                WebGPURequest::MapReadAsync => {},
+                WebGPURequest::MapWriteAsync => {},
                 WebGPURequest::Exit(sender) => {
                     self.deinit();
                     if let Err(e) = sender.send(()) {
                         warn!("Failed to send response to WebGPURequest::Exit ({})", e)
                     }
                     return;
-                },
             }
         }
     }
