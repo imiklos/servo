@@ -19,6 +19,8 @@ use wgpu::TypedId;
 pub enum WebGPUResponse {
     RequestAdapter(String, WebGPUAdapter),
     RequestDevice(WebGPUDevice, wgpu::DeviceDescriptor),
+    MapReadAsync,
+    MapWriteAsync,
 }
 
 pub type WebGPUResponseResult = Result<WebGPUResponse, String>;
@@ -35,6 +37,8 @@ pub enum WebGPURequest {
         WebGPUAdapter,
         wgpu::DeviceDescriptor,
     ),
+    MapReadAsync,
+    MapWriteAsync,
     Exit,
 >>>>>>> 1a30d91f45... WebGPU impl
 }
@@ -157,6 +161,8 @@ impl WGPU {
                         .send(Ok(WebGPUResponse::RequestDevice(device, options)))
                         .expect("Failed to send response");
                 },
+                WebGPURequest::MapReadAsync => {},
+                WebGPURequest::MapWriteAsync => {},
                 WebGPURequest::Exit => {
                     self.deinit();
                     return
