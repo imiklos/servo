@@ -12,12 +12,14 @@ pub extern crate wgpu_native as wgpu;
 use ipc_channel::ipc::{self, IpcReceiver, IpcSender};
 use malloc_size_of::{MallocSizeOf, MallocSizeOfOps};
 use servo_config::pref;
-use wgpu::{adapter_get_info, adapter_request_device};
+use wgpu::{adapter_get_info, adapter_request_device, device_create_buffer, buffer_destroy};
+use crate::wgpu::TypedId;
 
 #[derive(Debug, Deserialize, Serialize)]
 pub enum WebGPUResponse {
     RequestAdapter(String, WebGPUAdapter),
     RequestDevice(WebGPUDevice, wgpu::DeviceDescriptor),
+    CreateBuffer(WebGPUBuffer),
     MapReadAsync,
     MapWriteAsync,
 }
@@ -38,6 +40,8 @@ pub enum WebGPURequest {
         wgpu::DeviceId,
     ),
     Exit(IpcSender<()>),
+    CreateBuffer(IpcSender<WebGPUResponseResult>, WebGPUDevice),
+    DestroyBuffer(WebGPUBuffer),
     MapReadAsync,
     MapWriteAsync,
 }
@@ -145,6 +149,24 @@ impl WGPU {
                         )
                     }
                 },
+                WebGPURequest::CreateBuffer(sender, device) => {
+                    let id = wgpu::Id::zip(0, 0, wgpu::Backend::Vulkan);
+                    let desc = wgpu::BufferDescriptor {
+                        size: 16,
+                        usage: wgpu::BufferUsage::MAP_READ | wgpu::BufferUsage::COPY_DST,
+                    };
+                    let _output =
+                        gfx_select!(id => device_create_buffer(&self.global, device.0, &desc, id));
+                    let buffer = WebGPUBuffer(id);
+
+                    sender
+                        .send(Ok(WebGPUResponse::CreateBuffer(buffer)))
+                        .expect("Failed to send response");
+                },
+                WebGPURequest::DestroyBuffer(buffer) => {
+                    let _output =
+                        gfx_select!(buffer.0 => buffer_destroy(&self.global, buffer.0));
+                },
                 WebGPURequest::MapReadAsync => {},
                 WebGPURequest::MapWriteAsync => {},
                 WebGPURequest::Exit(sender) => {
@@ -153,6 +175,7 @@ impl WGPU {
                         warn!("Failed to send response to WebGPURequest::Exit ({})", e)
                     }
                     return;
+                },
             }
         }
     }
@@ -175,3 +198,4 @@ macro_rules! webgpu_resource {
 
 webgpu_resource!(WebGPUAdapter, wgpu::AdapterId);
 webgpu_resource!(WebGPUDevice, wgpu::DeviceId);
+webgpu_resource!(WebGPUBuffer, wgpu::BufferId);

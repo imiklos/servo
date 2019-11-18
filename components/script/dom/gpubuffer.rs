@@ -15,32 +15,54 @@ use crate::dom::bindings::error::Error;
 use crate::dom::promise::Promise;
 use std::rc::Rc;
 use crate::dom::gpu::AsyncWGPUListener;
-use webgpu::{WebGPUResponse};
+use crate::dom::bindings::root::MutDom;
+use webgpu::{WebGPUResponse, WebGPUBuffer, WebGPURequest, WebGPUDevice};
 use crate::compartments::InCompartment;
+
+pub enum GPUBufferState {
+    Mapped,
+    Unmapped,
+    Destroyed,
+}
 
 #[dom_struct]
 pub struct GPUBuffer {
     reflector_ : Reflector,
     label: DomRefCell<Option<DOMString>>,
-/*     size: GPUBufferSize,
-    usage: GPUBufferUsage,
-    state: GPUBufferState, */
+    size: GPUBufferSize,// u64
+    //usage: GPUBufferUsage,
+    #[ignore_malloc_size_of = "Arc"]
+    state: DomRefCell<GPUBufferState>,
+    #[ignore_malloc_size_of = "Arc"]
+    buffer: WebGPUBuffer,
+    #[ignore_malloc_size_of = "Arc"]
+    device: WebGPUDevice,
+    //valid: bool # Create invalid buffer...
 }
 
 impl GPUBuffer {
-    pub fn new_inherited() -> GPUBuffer {
+    pub fn new_inherited(
+        buffer: WebGPUBuffer,
+        device: WebGPUDevice,
+    ) -> GPUBuffer {
         Self {
             reflector_: Reflector::new(),
             label: DomRefCell::new(None),
+            size: Default::default(),
+            state: DomRefCell::new(GPUBufferState::Unmapped),
+            buffer,
+            device,
         }
     }
 
     #[allow(unsafe_code)]
     pub fn new(
         global: &GlobalScope,
+        buffer: WebGPUBuffer,
+        device: WebGPUDevice,
     ) -> DomRoot<GPUBuffer> {
         reflect_dom_object(
-            Box::new(GPUBuffer::new_inherited()),
+            Box::new(GPUBuffer::new_inherited(buffer, device)),
             global,
             GPUBufferBinding::Wrap,
         )
@@ -52,7 +74,7 @@ impl GPUBufferMethods for GPUBuffer {
         let promise = Promise::new_in_current_compartment(&self.global(), comp);
         let sender = response_async(&promise, self);
 
-        match self.global().as_window().webgpu_thread() {
+        match self.global().as_window().webgpu_channel() {
             Some(thread) => {
                /*  thread
                     .0
@@ -68,7 +90,7 @@ impl GPUBufferMethods for GPUBuffer {
         let promise = Promise::new_in_current_compartment(&self.global(), comp);
         let sender = response_async(&promise, self);
 
-        match self.global().as_window().webgpu_thread() {
+        match self.global().as_window().webgpu_channel() {
             Some(thread) => {
                 /* thread
                     .0
@@ -85,7 +107,20 @@ impl GPUBufferMethods for GPUBuffer {
     }
 
     fn Destroy(&self) {
-        
+        match *self.state.borrow() {
+            GPUBufferState::Mapped => {},//unmap
+            _ => {},
+        };
+        match self.global().as_window().webgpu_channel() {
+            Some(thread) => {
+                thread
+                    .0
+                    .send(WebGPURequest::DestroyBuffer(self.buffer))
+                    .unwrap()
+            },
+            None => {},
+        }
+        *self.state.borrow_mut() = GPUBufferState::Destroyed;
     }
 
     fn GetLabel(&self) -> Option<DOMString> {

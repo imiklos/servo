@@ -4,17 +4,22 @@
 
 use crate::dom::bindings::cell::DomRefCell;
 use crate::dom::bindings::codegen::Bindings::GPUDeviceBinding::{self, GPUDeviceMethods};
-use crate::dom::bindings::reflector::reflect_dom_object;
+use crate::dom::bindings::codegen::Bindings::GPUBufferDescriptorBinding::GPUBufferDescriptor;
+use crate::dom::bindings::codegen::Bindings::GPUBufferUsageBinding::GPUBufferUsageConstants as constants;
+use crate::dom::bindings::codegen::Bindings::GPUAdapterBinding::{GPUExtensions, GPULimits};
+use crate::dom::bindings::reflector::{reflect_dom_object, DomObject};
 use crate::dom::bindings::root::{Dom, DomRoot};
 use crate::dom::bindings::str::DOMString;
 use crate::dom::eventtarget::EventTarget;
 use crate::dom::globalscope::GlobalScope;
 use crate::dom::gpuadapter::GPUAdapter;
+use crate::dom::gpubuffer::GPUBuffer;
 use crate::script_runtime::JSContext as SafeJSContext;
+use ipc_channel::ipc;
 use dom_struct::dom_struct;
+use webgpu::{wgpu, WebGPUDevice, WebGPURequest, WebGPUResponse};
 use js::jsapi::{Heap, JSObject};
 use std::ptr::NonNull;
-use webgpu::WebGPUDevice;
 
 #[dom_struct]
 pub struct GPUDevice {
@@ -87,5 +92,36 @@ impl GPUDeviceMethods for GPUDevice {
     /// https://gpuweb.github.io/gpuweb/#dom-gpuobjectbase-label
     fn SetLabel(&self, value: Option<DOMString>) {
         *self.label.borrow_mut() = value;
+    }
+
+    fn CreateBuffer(&self, descriptor: &GPUBufferDescriptor) -> DomRoot<GPUBuffer> {
+        let valid = match descriptor.usage {
+            //constants::MAP_READ + constants::MAP_WRITE => false,
+            constants::MAP_READ..=constants::INDIRECT => true,
+            _ => false
+        };
+        let (sender, receiver) = ipc::channel().unwrap();
+        match self.global().as_window().webgpu_channel() {
+            Some(thread) => {
+                thread
+                    .0
+                    .send(WebGPURequest::CreateBuffer(sender, self.device))
+                    .unwrap()
+            },
+            None => {},
+        }
+
+        let buffer = match receiver.recv().unwrap() {
+            Ok(resp) => {
+                match resp {
+                    WebGPUResponse::CreateBuffer(buffer) => buffer,
+                    _ => unimplemented!()
+                }
+            },
+            Err(err) => unimplemented!(),
+        };
+        std::dbg!(println!("BUFFER: {:?}", buffer));
+
+        GPUBuffer::new(&self.global(), buffer, self.device/*, valid*/)
     }
 }
