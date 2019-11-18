@@ -3,15 +3,12 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
 use crate::dom::bindings::codegen::Bindings::GPUAdapterBinding::{self, GPUAdapterMethods};
-<<<<<<< HEAD
-=======
+
 use crate::dom::bindings::codegen::Bindings::GPUDeviceBinding::GPUDeviceDescriptor;
 use crate::compartments::InCompartment;
 use crate::dom::bindings::codegen::Bindings::GPUAdapterBinding::{self, GPUAdapterMethods, GPUDeviceDescriptor, GPULimits, GPUExtensions};
 use crate::dom::bindings::error::Error;
-use crate::dom::bindings::reflector::DomObject;
->>>>>>> 1a30d91f45... WebGPU impl
-use crate::dom::bindings::reflector::{reflect_dom_object, Reflector};
+use crate::dom::bindings::reflector::{reflect_dom_object, Reflector, DomObject};
 use crate::dom::bindings::root::DomRoot;
 use crate::dom::bindings::str::DOMString;
 use crate::dom::globalscope::GlobalScope;
@@ -74,8 +71,6 @@ impl GPUAdapterMethods for GPUAdapter {
     fn Extensions(&self, _cx: SafeJSContext) -> NonNull<JSObject> {
         NonNull::new(self.extensions.get()).unwrap()
     }
-<<<<<<< HEAD
-=======
 
     /// https://gpuweb.github.io/gpuweb/#dom-gpuadapter-requestdevice
     fn RequestDevice(&self, descriptor: &GPUDeviceDescriptor, comp: InCompartment) -> Rc<Promise> {
@@ -137,5 +132,4 @@ impl AsyncWGPUListener for GPUAdapter {
             )),
         }
     }
->>>>>>> 1a30d91f45... WebGPU impl
 }

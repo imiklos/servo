@@ -12,13 +12,14 @@ pub extern crate wgpu_native as wgpu;
 use ipc_channel::ipc::{self, IpcReceiver, IpcSender};
 use malloc_size_of::{MallocSizeOf, MallocSizeOfOps};
 use servo_config::pref;
-use wgpu::{adapter_get_info, adapter_request_device};
+use wgpu::{adapter_get_info, adapter_request_device, device_create_buffer, buffer_destroy};
 use wgpu::TypedId;
 
 #[derive(Debug, Deserialize, Serialize)]
 pub enum WebGPUResponse {
     RequestAdapter(String, WebGPUAdapter),
     RequestDevice(WebGPUDevice, wgpu::DeviceDescriptor),
+    CreateBuffer(WebGPUBuffer),
     MapReadAsync,
     MapWriteAsync,
 }
@@ -37,6 +38,8 @@ pub enum WebGPURequest {
         WebGPUAdapter,
         wgpu::DeviceDescriptor,
     ),
+    CreateBuffer(IpcSender<WebGPUResponseResult>, WebGPUDevice),
+    DestroyBuffer(WebGPUBuffer),
     MapReadAsync,
     MapWriteAsync,
     Exit,
@@ -161,6 +164,24 @@ impl WGPU {
                         .send(Ok(WebGPUResponse::RequestDevice(device, options)))
                         .expect("Failed to send response");
                 },
+                WebGPURequest::CreateBuffer(sender, device) => {
+                    let id = wgpu::Id::zip(0, 0, wgpu::Backend::Vulkan);
+                    let desc = wgpu::BufferDescriptor {
+                        size: 16,
+                        usage: wgpu::BufferUsage::MAP_READ | wgpu::BufferUsage::COPY_DST,
+                    };
+                    let _output =
+                        gfx_select!(id => device_create_buffer(&self.global, device.0, &desc, id));
+                    let buffer = WebGPUBuffer(id);
+
+                    sender
+                        .send(Ok(WebGPUResponse::CreateBuffer(buffer)))
+                        .expect("Failed to send response");
+                },
+                WebGPURequest::DestroyBuffer(buffer) => {
+                    let _output =
+                        gfx_select!(buffer.0 => buffer_destroy(&self.global, buffer.0));
+                },
                 WebGPURequest::MapReadAsync => {},
                 WebGPURequest::MapWriteAsync => {},
                 WebGPURequest::Exit => {
@@ -185,4 +206,10 @@ impl MallocSizeOf for WebGPUAdapter {
 =======
 #[derive(Clone, Copy, Debug, Deserialize, Serialize)]
 pub struct WebGPUDevice(pub wgpu::DeviceId);
+<<<<<<< HEAD
 >>>>>>> 1a30d91f45... WebGPU impl
+=======
+
+#[derive(Clone, Copy, Debug, Deserialize, Serialize)]
+pub struct WebGPUBuffer(pub wgpu::BufferId);
+>>>>>>> 02b0692180... Expose GPUBufferUsage

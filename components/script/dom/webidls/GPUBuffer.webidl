@@ -3,7 +3,7 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
 // https://gpuweb.github.io/gpuweb/#gpubuffer
-[Exposed=(Window), Serializable]
+[Exposed=(Window , DedicatedWorker), Serializable]
 interface GPUBuffer {
     Promise<ArrayBuffer> mapReadAsync();
     Promise<ArrayBuffer> mapWriteAsync();
@@ -12,6 +12,7 @@ interface GPUBuffer {
     void destroy();
 };
 GPUBuffer includes GPUObjectBase;
+//GPUBuffer includes GPUBufferUsage;
 
 typedef unsigned long long GPUBufferSize;
 

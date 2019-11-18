@@ -37,6 +37,7 @@ use crate::dom::bindings::root::{Dom, DomRoot};
 use crate::dom::bindings::str::{DOMString, USVString};
 use crate::dom::bindings::utils::WindowProxyHandler;
 use crate::dom::document::PendingRestyle;
+use crate::dom::gpubuffer::GPUBufferState;
 use crate::dom::htmlimageelement::SourceSet;
 use crate::dom::htmlmediaelement::{HTMLMediaElementFetchContext, MediaFrameRenderer};
 use crate::task::TaskBox;
@@ -145,10 +146,14 @@ use tendril::{StrTendril, TendrilSink};
 use time::{Duration, Timespec};
 use uuid::Uuid;
 <<<<<<< HEAD
+<<<<<<< HEAD
 use webgpu::{WebGPU, WebGPUAdapter};
 =======
 use webgpu::{WebGPUAdapter, WebGPUThread, WebGPUDevice};
 >>>>>>> 1a30d91f45... WebGPU impl
+=======
+use webgpu::{WebGPUAdapter, WebGPUThread, WebGPUDevice, WebGPUBuffer};
+>>>>>>> 02b0692180... Expose GPUBufferUsage
 use webrender_api::{DocumentId, ImageKey, RenderApiSender};
 use webvr_traits::{WebVRGamepadData, WebVRGamepadHand, WebVRGamepadState};
 use webxr_api::SwapChainId as WebXRSwapChainId;
@@ -508,6 +513,12 @@ unsafe_no_jsmanaged_fields!(WebGLVersion);
 unsafe_no_jsmanaged_fields!(WebGLSLVersion);
 unsafe_no_jsmanaged_fields!(WebGPU);
 unsafe_no_jsmanaged_fields!(WebGPUAdapter);
+unsafe_no_jsmanaged_fields!(WebGPUDevice);
+unsafe_no_jsmanaged_fields!(WebGPUBuffer);
+/* unsafe_no_jsmanaged_fields!(WebGPULimits);
+unsafe_no_jsmanaged_fields!(WebGPUExtensions); */
+unsafe_no_jsmanaged_fields!(GPUBufferState);
+unsafe_no_jsmanaged_fields!(WebGPUThread);
 unsafe_no_jsmanaged_fields!(WebXRSwapChainId);
 unsafe_no_jsmanaged_fields!(MediaList);
 unsafe_no_jsmanaged_fields!(WebVRGamepadData, WebVRGamepadState, WebVRGamepadHand);
