@@ -39,7 +39,7 @@ pub enum WebGPURequest {
     DestroyBuffer(WebGPUBuffer),
     MapReadAsync,
     MapWriteAsync,
-    Exit,
+    Exit(IpcSender<()>),
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]

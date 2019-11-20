@@ -2,9 +2,6 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
-use crate::dom::bindings::codegen::Bindings::GPUAdapterBinding::{self, GPUAdapterMethods};
-
-use crate::dom::bindings::codegen::Bindings::GPUDeviceBinding::GPUDeviceDescriptor;
 use crate::compartments::InCompartment;
 use crate::dom::bindings::codegen::Bindings::GPUAdapterBinding::{self, GPUAdapterMethods, GPUDeviceDescriptor, GPULimits, GPUExtensions};
 use crate::dom::bindings::error::Error;
@@ -77,7 +74,7 @@ impl GPUAdapterMethods for GPUAdapter {
         let promise = Promise::new_in_current_compartment(&self.global(), comp);
         let sender = response_async(&promise, self);
 
-        match self.global().as_window().webgpu_thread() {
+        match self.global().as_window().webgpu_channel() {
             Some(thread) => {
                 thread
                     .0

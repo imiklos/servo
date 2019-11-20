@@ -105,7 +105,7 @@ impl GPUDeviceMethods for GPUDevice {
             _ => false
         };
         let (sender, receiver) = ipc::channel().unwrap();
-        match self.global().as_window().webgpu_thread() {
+        match self.global().as_window().webgpu_channel() {
             Some(thread) => {
                 thread
                     .0

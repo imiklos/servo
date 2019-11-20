@@ -74,7 +74,7 @@ impl GPUBufferMethods for GPUBuffer {
         let promise = Promise::new_in_current_compartment(&self.global(), comp);
         let sender = response_async(&promise, self);
 
-        match self.global().as_window().webgpu_thread() {
+        match self.global().as_window().webgpu_channel() {
             Some(thread) => {
                /*  thread
                     .0
@@ -90,7 +90,7 @@ impl GPUBufferMethods for GPUBuffer {
         let promise = Promise::new_in_current_compartment(&self.global(), comp);
         let sender = response_async(&promise, self);
 
-        match self.global().as_window().webgpu_thread() {
+        match self.global().as_window().webgpu_channel() {
             Some(thread) => {
                 /* thread
                     .0
@@ -111,7 +111,7 @@ impl GPUBufferMethods for GPUBuffer {
             GPUBufferState::Mapped => {},//unmap
             _ => {},
         };
-        match self.global().as_window().webgpu_thread() {
+        match self.global().as_window().webgpu_channel() {
             Some(thread) => {
                 thread
                     .0

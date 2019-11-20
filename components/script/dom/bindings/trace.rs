@@ -145,15 +145,7 @@ use tendril::stream::LossyDecoder;
 use tendril::{StrTendril, TendrilSink};
 use time::{Duration, Timespec};
 use uuid::Uuid;
-<<<<<<< HEAD
-<<<<<<< HEAD
-use webgpu::{WebGPU, WebGPUAdapter};
-=======
-use webgpu::{WebGPUAdapter, WebGPUThread, WebGPUDevice};
->>>>>>> 1a30d91f45... WebGPU impl
-=======
-use webgpu::{WebGPUAdapter, WebGPUThread, WebGPUDevice, WebGPUBuffer};
->>>>>>> 02b0692180... Expose GPUBufferUsage
+use webgpu::{WebGPUAdapter, WebGPU, WebGPUDevice, WebGPUBuffer};
 use webrender_api::{DocumentId, ImageKey, RenderApiSender};
 use webvr_traits::{WebVRGamepadData, WebVRGamepadHand, WebVRGamepadState};
 use webxr_api::SwapChainId as WebXRSwapChainId;
@@ -518,7 +510,6 @@ unsafe_no_jsmanaged_fields!(WebGPUBuffer);
 /* unsafe_no_jsmanaged_fields!(WebGPULimits);
 unsafe_no_jsmanaged_fields!(WebGPUExtensions); */
 unsafe_no_jsmanaged_fields!(GPUBufferState);
-unsafe_no_jsmanaged_fields!(WebGPUThread);
 unsafe_no_jsmanaged_fields!(WebXRSwapChainId);
 unsafe_no_jsmanaged_fields!(MediaList);
 unsafe_no_jsmanaged_fields!(WebVRGamepadData, WebVRGamepadState, WebVRGamepadHand);
