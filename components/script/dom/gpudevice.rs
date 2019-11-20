@@ -68,6 +68,12 @@ impl GPUDevice {
     }
 }
 
+impl Drop for GPUDevice {
+    fn drop(&mut self){
+        println!("###DROPDevice");
+    }
+}
+
 impl GPUDeviceMethods for GPUDevice {
     /// https://gpuweb.github.io/gpuweb/#dom-gpudevice-adapter
     fn Adapter(&self) -> DomRoot<GPUAdapter> {

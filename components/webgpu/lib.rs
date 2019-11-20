@@ -12,7 +12,8 @@ pub extern crate wgpu_native as wgpu;
 use ipc_channel::ipc::{self, IpcReceiver, IpcSender};
 use malloc_size_of::{MallocSizeOf, MallocSizeOfOps};
 use servo_config::pref;
-use wgpu::{adapter_get_info, adapter_request_device, device_create_buffer, buffer_destroy};
+use std::collections::HashMap;
+use wgpu::{adapter_get_info, adapter_request_device, device_create_buffer, buffer_destroy, device_destroy};
 use wgpu::TypedId;
 
 #[derive(Debug, Deserialize, Serialize)]
@@ -29,10 +30,6 @@ pub type WebGPUResponseResult = Result<WebGPUResponse, String>;
 #[derive(Debug, Deserialize, Serialize)]
 pub enum WebGPURequest {
     RequestAdapter(IpcSender<WebGPUResponseResult>, wgpu::RequestAdapterOptions),
-<<<<<<< HEAD
-    RequestDevice,
-    Exit(IpcSender<()>),
-=======
     RequestDevice(
         IpcSender<WebGPUResponseResult>,
         WebGPUAdapter,
@@ -43,7 +40,6 @@ pub enum WebGPURequest {
     MapReadAsync,
     MapWriteAsync,
     Exit,
->>>>>>> 1a30d91f45... WebGPU impl
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -90,6 +86,8 @@ struct WGPU {
     adapters: Vec<WebGPUAdapter>,
     // Track invalid adapters https://gpuweb.github.io/gpuweb/#invalid
     _invalid_adapters: Vec<WebGPUAdapter>,
+    devices_adapters: HashMap<WebGPUDevice, WebGPUAdapter>,
+    buffer_devices: HashMap<WebGPUBuffer, WebGPUDevice>,
 }
 
 impl WGPU {
@@ -99,11 +97,23 @@ impl WGPU {
             global: wgpu::Global::new("webgpu-native"),
             adapters: Vec::new(),
             _invalid_adapters: Vec::new(),
+            devices_adapters: HashMap::new(),
+            buffer_devices: HashMap::new(),
         }
     }
 
     fn deinit(self) {
-        self.global.delete()
+        for buffer in self.buffer_devices.keys() {
+            std::dbg!(println!("#DEINIT: Buffer {:?}", buffer.0));
+            let _out = gfx_select!(buffer.0 => buffer_destroy(&self.global, buffer.0));
+            std::dbg!(println!("#DEINIT: Buffer {:?}", _out));
+        }
+        for device in self.devices_adapters.keys() {
+            std::dbg!(println!("#DEINIT: Device {:?}", device.0));
+            let _out = gfx_select!(device.0 => device_destroy(&self.global, device.0));
+            std::dbg!(println!("#DEINIT: Device {:?}", _out));
+        }
+        self.global.delete();
     }
 
     fn run(mut self) {
@@ -145,24 +155,15 @@ impl WGPU {
                         )
                     }
                 },
-<<<<<<< HEAD
-                WebGPURequest::RequestDevice => {},
-                WebGPURequest::Exit(sender) => {
-                    self.deinit();
-                    if let Err(e) = sender.send(()) {
-                        warn!("Failed to send response to WebGPURequest::Exit ({})", e)
-                    }
-                    return;
-=======
                 WebGPURequest::RequestDevice(sender, adapter , options) => {
                     let id = wgpu::Id::zip(0, 0, wgpu::Backend::Vulkan);
                     let _output =
-                        gfx_select!(id => adapter_request_device(&self.global, adapter.0, &options, id));
+                    gfx_select!(id => adapter_request_device(&self.global, adapter.0, &options, id));
                     let device = WebGPUDevice(id);
-
+                    self.devices_adapters.insert(device, adapter);
                     sender
-                        .send(Ok(WebGPUResponse::RequestDevice(device, options)))
-                        .expect("Failed to send response");
+                    .send(Ok(WebGPUResponse::RequestDevice(device, options)))
+                    .expect("Failed to send response");
                 },
                 WebGPURequest::CreateBuffer(sender, device) => {
                     let id = wgpu::Id::zip(0, 0, wgpu::Backend::Vulkan);
@@ -171,45 +172,41 @@ impl WGPU {
                         usage: wgpu::BufferUsage::MAP_READ | wgpu::BufferUsage::COPY_DST,
                     };
                     let _output =
-                        gfx_select!(id => device_create_buffer(&self.global, device.0, &desc, id));
+                    gfx_select!(id => device_create_buffer(&self.global, device.0, &desc, id));
                     let buffer = WebGPUBuffer(id);
-
+                    self.buffer_devices.insert(buffer, device);
                     sender
-                        .send(Ok(WebGPUResponse::CreateBuffer(buffer)))
-                        .expect("Failed to send response");
+                    .send(Ok(WebGPUResponse::CreateBuffer(buffer)))
+                    .expect("Failed to send response");
                 },
                 WebGPURequest::DestroyBuffer(buffer) => {
                     let _output =
-                        gfx_select!(buffer.0 => buffer_destroy(&self.global, buffer.0));
+                    gfx_select!(buffer.0 => buffer_destroy(&self.global, buffer.0));
                 },
                 WebGPURequest::MapReadAsync => {},
                 WebGPURequest::MapWriteAsync => {},
-                WebGPURequest::Exit => {
+                WebGPURequest::Exit(sender) => {
                     self.deinit();
-                    return
->>>>>>> 1a30d91f45... WebGPU impl
+                    if let Err(e) = sender.send(()) {
+                        warn!("Failed to send response to WebGPURequest::Exit ({})", e)
+                    }
+                    return;
                 },
             }
         }
     }
 }
 
-#[derive(Clone, Copy, Debug, Deserialize, Serialize)]
+#[derive(Clone, Copy, Debug, Deserialize, Serialize, PartialEq, Eq, Hash)]
 pub struct WebGPUAdapter(pub wgpu::AdapterId);
-
-<<<<<<< HEAD
 impl MallocSizeOf for WebGPUAdapter {
     fn size_of(&self, _ops: &mut MallocSizeOfOps) -> usize {
         0
     }
 }
-=======
-#[derive(Clone, Copy, Debug, Deserialize, Serialize)]
-pub struct WebGPUDevice(pub wgpu::DeviceId);
-<<<<<<< HEAD
->>>>>>> 1a30d91f45... WebGPU impl
-=======
 
-#[derive(Clone, Copy, Debug, Deserialize, Serialize)]
+#[derive(Clone, Copy, Debug, Deserialize, Serialize, PartialEq, Eq, Hash)]
+pub struct WebGPUDevice(pub wgpu::DeviceId);
+
+#[derive(Clone, Copy, Debug, Deserialize, Serialize, PartialEq, Eq, Hash)]
 pub struct WebGPUBuffer(pub wgpu::BufferId);
->>>>>>> 02b0692180... Expose GPUBufferUsage

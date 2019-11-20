@@ -132,6 +132,12 @@ impl GPUBufferMethods for GPUBuffer {
     }
 }
 
+impl Drop for GPUBuffer {
+    fn drop(&mut self){
+        println!("###DROPBuffer");
+    }
+}
+
 impl AsyncWGPUListener for GPUBuffer {
     fn handle_response(&self, response: WebGPUResponse, promise: &Rc<Promise>) {
         match response {
