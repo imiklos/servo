@@ -58,6 +58,12 @@ impl GPUAdapter {
     }
 }
 
+impl Drop for GPUAdapter {
+    fn drop(&mut self) {
+        println!("###DROPAdapter");
+    }
+}
+
 impl GPUAdapterMethods for GPUAdapter {
     // https://gpuweb.github.io/gpuweb/#dom-gpuadapter-name
     fn Name(&self) -> DOMString {

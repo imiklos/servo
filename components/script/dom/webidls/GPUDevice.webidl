@@ -10,8 +10,8 @@ interface GPUDevice : EventTarget {
     readonly attribute object limits;
 
     GPUBuffer createBuffer(GPUBufferDescriptor descriptor);
-    /*GPUMappedBuffer createBufferMapped(GPUBufferDescriptor descriptor);
-    Promise<GPUMappedBuffer> createBufferMappedAsync(GPUBufferDescriptor descriptor);
+    GPUMappedBuffer createBufferMapped(GPUBufferDescriptor descriptor);
+    /*Promise<GPUMappedBuffer> createBufferMappedAsync(GPUBufferDescriptor descriptor);
     GPUTexture createTexture(GPUTextureDescriptor descriptor);
     GPUSampler createSampler(optional GPUSamplerDescriptor descriptor = {});
 

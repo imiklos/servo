@@ -12,8 +12,9 @@ interface GPUBuffer {
     void destroy();
 };
 GPUBuffer includes GPUObjectBase;
-//GPUBuffer includes GPUBufferUsage;
 
 typedef unsigned long long GPUBufferSize;
 
 typedef unsigned long GPUBufferUsageFlags;
+
+typedef sequence<any> GPUMappedBuffer;

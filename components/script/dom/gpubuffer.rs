@@ -16,7 +16,7 @@ use crate::dom::promise::Promise;
 use std::rc::Rc;
 use crate::dom::gpu::AsyncWGPUListener;
 use crate::dom::bindings::root::MutDom;
-use webgpu::{WebGPUResponse, WebGPUBuffer, WebGPURequest, WebGPUDevice};
+use webgpu::{wgpu, WebGPUResponse, WebGPUBuffer, WebGPURequest, WebGPUDevice};
 use crate::compartments::InCompartment;
 
 pub enum GPUBufferState {
@@ -30,7 +30,7 @@ pub struct GPUBuffer {
     reflector_ : Reflector,
     label: DomRefCell<Option<DOMString>>,
     size: GPUBufferSize,// u64
-    //usage: GPUBufferUsage,
+    usage: u32,
     #[ignore_malloc_size_of = "Arc"]
     state: DomRefCell<GPUBufferState>,
     #[ignore_malloc_size_of = "Arc"]
@@ -44,11 +44,14 @@ impl GPUBuffer {
     pub fn new_inherited(
         buffer: WebGPUBuffer,
         device: WebGPUDevice,
+        size: GPUBufferSize,
+        usage: u32,
     ) -> GPUBuffer {
         Self {
             reflector_: Reflector::new(),
             label: DomRefCell::new(None),
-            size: Default::default(),
+            size,
+            usage,
             state: DomRefCell::new(GPUBufferState::Unmapped),
             buffer,
             device,
@@ -60,9 +63,10 @@ impl GPUBuffer {
         global: &GlobalScope,
         buffer: WebGPUBuffer,
         device: WebGPUDevice,
+        descriptor: wgpu::BufferDescriptor,
     ) -> DomRoot<GPUBuffer> {
         reflect_dom_object(
-            Box::new(GPUBuffer::new_inherited(buffer, device)),
+            Box::new(GPUBuffer::new_inherited(buffer, device, descriptor.size, descriptor.usage.bits())),
             global,
             GPUBufferBinding::Wrap,
         )

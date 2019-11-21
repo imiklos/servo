@@ -4,10 +4,9 @@
 
 use crate::dom::bindings::codegen::Bindings::GPUDeviceBinding::{self, GPUDeviceMethods};
 use crate::dom::bindings::codegen::Bindings::GPUBufferDescriptorBinding::GPUBufferDescriptor;
-use crate::dom::bindings::codegen::Bindings::GPUBufferUsageBinding::GPUBufferUsageConstants as constants;
 use crate::dom::bindings::codegen::Bindings::GPUAdapterBinding::{GPUExtensions, GPULimits};
 use crate::dom::bindings::reflector::{reflect_dom_object, DomObject};
-use crate::dom::bindings::root::{Dom, DomRoot};
+use crate::dom::bindings::root::DomRoot;
 use crate::dom::bindings::cell::DomRefCell;
 use crate::dom::eventtarget::EventTarget;
 use crate::dom::globalscope::GlobalScope;
@@ -99,17 +98,20 @@ impl GPUDeviceMethods for GPUDevice {
     }
 
     fn CreateBuffer(&self, descriptor: &GPUBufferDescriptor) -> DomRoot<GPUBuffer> {
-        let valid = match descriptor.usage {
-            //constants::MAP_READ + constants::MAP_WRITE => false,
-            constants::MAP_READ..=constants::INDIRECT => true,
-            _ => false
+        let _valid = match wgpu::BufferUsage::from_bits(descriptor.usage) {
+            Some(usage) => true,
+            None => false,
+        };
+        let desc = wgpu::BufferDescriptor {
+            size: descriptor.size,
+            usage: wgpu::BufferUsage::from_bits(descriptor.usage).unwrap(),
         };
         let (sender, receiver) = ipc::channel().unwrap();
         match self.global().as_window().webgpu_channel() {
             Some(thread) => {
                 thread
                     .0
-                    .send(WebGPURequest::CreateBuffer(sender, self.device))
+                    .send(WebGPURequest::CreateBuffer(sender, self.device, desc.clone()))
                     .unwrap()
             },
             None => {},
@@ -126,7 +128,35 @@ impl GPUDeviceMethods for GPUDevice {
         };
         std::dbg!(println!("BUFFER: {:?}", buffer));
 
-        GPUBuffer::new(&self.global(), buffer, self.device/*, valid*/)
+        GPUBuffer::new(&self.global(), buffer, self.device, desc/*, valid*/)
+    }
+
+    fn CreateBufferMapped(&self, cx: SafeJSContext, descriptor: &GPUBufferDescriptor) -> Vec<JSVal> {
+        let desc = wgpu::BufferDescriptor {
+            size: descriptor.size,
+            usage: wgpu::BufferUsage::from_bits(descriptor.usage).unwrap(),
+        };
+        let (sender, receiver) = ipc::channel().unwrap();
+        match self.global().as_window().webgpu_channel() {
+            Some(thread) => {
+                thread
+                    .0
+                    .send(WebGPURequest::CreateMappedBuffer(sender, self.device, desc.clone()))
+                    .unwrap()
+            },
+            None => {},
+        }
+
+        let buffer = match receiver.recv().unwrap() {
+            Ok(resp) => {
+                match resp {
+                    WebGPUResponse::CreateMappedBuffer(buffer) => buffer,
+                    _ => unimplemented!()
+                }
+            },
+            Err(err) => unimplemented!(),
+        };
+        Vec::new(UndefinedValue())
     }
 }
 
@@ -137,6 +167,24 @@ impl From<wgpu::Extensions> for GPUExtensions {
         }
     }
 }
+
+/* impl From<u32> for wgpu::BufferUsage {
+    fn from(usage: u32) -> Self {
+        wgpu::BufferUsage {
+            MAP_READ: usage << 32,
+            MAP_WRITE: usage << 31,
+            COPY_SRC: usage << 30,
+            COPY_DST: usage << 29,
+            INDEX: usage << 28,
+            VERTEX: usage << 27,
+            UNIFORM: usage << 26,
+            STORAGE: usage << 25,
+            STORAGE_READ: usage << 24,
+            INDIRECT: usage << 23,
+            NONE: usage << 22,
+        }
+    }
+} */
 
 impl From<wgpu::Limits> for GPULimits {
     fn from(limits: wgpu::Limits) -> Self {

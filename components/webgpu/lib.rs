@@ -13,7 +13,7 @@ use ipc_channel::ipc::{self, IpcReceiver, IpcSender};
 use malloc_size_of::{MallocSizeOf, MallocSizeOfOps};
 use servo_config::pref;
 use std::collections::HashMap;
-use wgpu::{adapter_get_info, adapter_request_device, device_create_buffer, buffer_destroy, device_destroy};
+use wgpu::{adapter_get_info, adapter_request_device, device_create_buffer, buffer_destroy, device_destroy, device_poll};
 use wgpu::TypedId;
 
 #[derive(Debug, Deserialize, Serialize)]
@@ -21,6 +21,7 @@ pub enum WebGPUResponse {
     RequestAdapter(String, WebGPUAdapter),
     RequestDevice(WebGPUDevice, wgpu::DeviceDescriptor),
     CreateBuffer(WebGPUBuffer),
+    CreateMappedBuffer(GPUMappedBuffer),
     MapReadAsync,
     MapWriteAsync,
 }
@@ -35,7 +36,8 @@ pub enum WebGPURequest {
         WebGPUAdapter,
         wgpu::DeviceDescriptor,
     ),
-    CreateBuffer(IpcSender<WebGPUResponseResult>, WebGPUDevice),
+    CreateBuffer(IpcSender<WebGPUResponseResult>, WebGPUDevice, wgpu::BufferDescriptor),
+    CreateMappedBuffer(IpcSender<WebGPUResponseResult>, WebGPUDevice, wgpu::BufferDescriptor),
     DestroyBuffer(WebGPUBuffer),
     MapReadAsync,
     MapWriteAsync,
@@ -102,17 +104,20 @@ impl WGPU {
         }
     }
 
-    fn deinit(self) {
-        for buffer in self.buffer_devices.keys() {
+    fn deinit(mut self) {
+        for (buffer, device) in self.buffer_devices.drain() {
             std::dbg!(println!("#DEINIT: Buffer {:?}", buffer.0));
+            gfx_select!(device.0 => device_poll(&self.global, device.0, true));
             let _out = gfx_select!(buffer.0 => buffer_destroy(&self.global, buffer.0));
             std::dbg!(println!("#DEINIT: Buffer {:?}", _out));
         }
-        for device in self.devices_adapters.keys() {
+        assert!(self.buffer_devices.is_empty());
+        for (device, _adapter) in self.devices_adapters.drain() {
             std::dbg!(println!("#DEINIT: Device {:?}", device.0));
             let _out = gfx_select!(device.0 => device_destroy(&self.global, device.0));
             std::dbg!(println!("#DEINIT: Device {:?}", _out));
         }
+        assert!(self.devices_adapters.is_empty());
         self.global.delete();
     }
 
@@ -156,23 +161,20 @@ impl WGPU {
                     }
                 },
                 WebGPURequest::RequestDevice(sender, adapter , options) => {
-                    let id = wgpu::Id::zip(0, 0, wgpu::Backend::Vulkan);
+                    //generate ID
+                    let id = wgpu::Id::zip(1, 0, wgpu::Backend::Vulkan);
                     let _output =
                     gfx_select!(id => adapter_request_device(&self.global, adapter.0, &options, id));
                     let device = WebGPUDevice(id);
                     self.devices_adapters.insert(device, adapter);
                     sender
-                    .send(Ok(WebGPUResponse::RequestDevice(device, options)))
-                    .expect("Failed to send response");
+                        .send(Ok(WebGPUResponse::RequestDevice(device, options)))
+                        .expect("Failed to send response");
                 },
-                WebGPURequest::CreateBuffer(sender, device) => {
-                    let id = wgpu::Id::zip(0, 0, wgpu::Backend::Vulkan);
-                    let desc = wgpu::BufferDescriptor {
-                        size: 16,
-                        usage: wgpu::BufferUsage::MAP_READ | wgpu::BufferUsage::COPY_DST,
-                    };
+                WebGPURequest::CreateBuffer(sender, device, descriptor) => {
+                    let id = wgpu::Id::zip(2, 0, wgpu::Backend::Vulkan);
                     let _output =
-                    gfx_select!(id => device_create_buffer(&self.global, device.0, &desc, id));
+                    gfx_select!(id => device_create_buffer(&self.global, device.0, &descriptor, id));
                     let buffer = WebGPUBuffer(id);
                     self.buffer_devices.insert(buffer, device);
                     sender
@@ -180,8 +182,9 @@ impl WGPU {
                     .expect("Failed to send response");
                 },
                 WebGPURequest::DestroyBuffer(buffer) => {
+                    self.buffer_devices.remove(&buffer);
                     let _output =
-                    gfx_select!(buffer.0 => buffer_destroy(&self.global, buffer.0));
+                        gfx_select!(buffer.0 => buffer_destroy(&self.global, buffer.0));
                 },
                 WebGPURequest::MapReadAsync => {},
                 WebGPURequest::MapWriteAsync => {},
