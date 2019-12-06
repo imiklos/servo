@@ -2,11 +2,17 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
+#![allow(unsafe_code)]
+
 use crate::dom::bindings::cell::DomRefCell;
 use crate::dom::bindings::codegen::Bindings::GPUDeviceBinding::{self, GPUDeviceMethods};
 use crate::dom::bindings::codegen::Bindings::GPUBufferDescriptorBinding::GPUBufferDescriptor;
 use crate::dom::bindings::codegen::Bindings::GPUBufferUsageBinding::GPUBufferUsageConstants as constants;
-use crate::dom::bindings::codegen::Bindings::GPUAdapterBinding::{GPUExtensions, GPULimits};
+use crate::dom::bindings::codegen::Bindings::WindowBinding::WindowBinding::WindowMethods;
+//use crate::dom::bindings::codegen::Bindings::GPUAdapterBinding::{GPUExtensions, GPULimits};
+use js::jsapi::JS_GetArrayBufferViewBuffer;
+use crate::dom::bindings::error::Error;
+use crate::dom::bindings::inheritance::Castable;
 use crate::dom::bindings::reflector::{reflect_dom_object, DomObject};
 use crate::dom::bindings::root::{Dom, DomRoot};
 use crate::dom::bindings::str::DOMString;
@@ -14,11 +20,19 @@ use crate::dom::eventtarget::EventTarget;
 use crate::dom::globalscope::GlobalScope;
 use crate::dom::gpuadapter::GPUAdapter;
 use crate::dom::gpubuffer::GPUBuffer;
+use crate::dom::promise::Promise;
+use crate::dom::window::Window;
+use crate::js::conversions::ToJSValConvertible;
 use crate::script_runtime::JSContext as SafeJSContext;
 use ipc_channel::ipc;
 use dom_struct::dom_struct;
 use webgpu::{wgpu, WebGPUDevice, WebGPURequest, WebGPUResponse};
 use js::jsapi::{Heap, JSObject};
+use js::jsval::JSVal;
+use js::jsval::UndefinedValue;
+use js::jsval::ObjectValue;
+use js::typedarray::{ArrayBuffer, CreateWith};
+use std::ptr;
 use std::ptr::NonNull;
 
 #[dom_struct]
@@ -101,15 +115,18 @@ impl GPUDeviceMethods for GPUDevice {
             _ => false
         };
         let (sender, receiver) = ipc::channel().unwrap();
-        match self.global().as_window().webgpu_channel() {
-            Some(thread) => {
-                thread
+        if let Some(window) = self.global().downcast::<Window>() {
+            let id = window.Navigator().create_buffer_id();
+            match window.webgpu_channel() {
+                Some(thread) => thread
                     .0
-                    .send(WebGPURequest::CreateBuffer(sender, self.device))
-                    .unwrap()
-            },
-            None => {},
-        }
+                    .send(WebGPURequest::CreateBuffer(sender, self.device, id))
+                    .unwrap(),
+                None => unimplemented!(),
+            }
+        } else {
+            unimplemented!()
+        };
 
         let buffer = match receiver.recv().unwrap() {
             Ok(resp) => {
@@ -123,5 +140,46 @@ impl GPUDeviceMethods for GPUDevice {
         std::dbg!(println!("BUFFER: {:?}", buffer));
 
         GPUBuffer::new(&self.global(), buffer, self.device/*, valid*/)
+    }
+
+    fn CreateBufferMapped(&self, cx: SafeJSContext, descriptor: &GPUBufferDescriptor) -> Vec<JSVal>{
+        rooted!(in(*cx) let mut buffer = UndefinedValue());
+        rooted!(in(*cx) let mut array_buffer = ptr::null_mut::<JSObject>());
+            unsafe { ArrayBuffer::create(
+                *cx,
+                CreateWith::Slice(&array.as_slice()),
+                array_buffer.handle_mut()
+            )
+            .is_ok() };
+        let (sender, receiver) = ipc::channel().unwrap();
+        if let Some(window) = self.global().downcast::<Window>() {
+            let id = window.Navigator().create_buffer_id();
+            match window.webgpu_channel() {
+                Some(thread) => thread
+                    .0
+                    .send(WebGPURequest::CreateBufferMapped(sender, self.device, id, array_buffer.to_vec()))
+                    .unwrap(),
+                None => unimplemented!(),
+            }
+        } else {
+            unimplemented!()
+        };
+
+        let (buffer, array) = match receiver.recv().unwrap() {
+            Ok(resp) => {
+                match resp {
+                    WebGPUResponse::CreateBufferMapped(buffer, array) => (buffer, array),
+                    _ => unimplemented!()
+                }
+            },
+            Err(err) => unimplemented!(),
+        };
+        let buff = GPUBuffer::new(&self.global(), buffer, self.device/*, valid*/);
+        let mut out = Vec::new();
+
+        unsafe { buff.to_jsval(*cx, buffer.handle_mut()) };
+        out.push(buffer.get());
+        out.push(ObjectValue(array_buffer.get()));
+        out
     }
 }

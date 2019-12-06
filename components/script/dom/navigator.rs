@@ -26,7 +26,7 @@ use crate::dom::xr::XR;
 use dom_struct::dom_struct;
 use std::cell::RefCell;
 use std::rc::Rc;
-use webgpu::wgpu::{AdapterId, DeviceId};
+use webgpu::wgpu::{AdapterId, DeviceId, BufferId};
 
 #[dom_struct]
 pub struct Navigator {
@@ -79,6 +79,10 @@ impl Navigator {
 
     pub fn create_device_id(&self) -> DeviceId {
         self.gpu_id_hub.borrow_mut().create_device_id()
+    }
+
+    pub fn create_buffer_id(&self) -> BufferId {
+        self.gpu_id_hub.borrow_mut().create_buffer_id()
     }
 }
 

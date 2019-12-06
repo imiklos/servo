@@ -3,8 +3,9 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
 use crate::dom::bindings::codegen::Bindings::GPUBufferBinding::{self, GPUBufferMethods, GPUBufferSize};
+use crate::dom::bindings::inheritance::Castable;
 use crate::dom::bindings::reflector::{reflect_dom_object, Reflector};
-use crate::dom::bindings::root::{Dom, DomRoot};
+use crate::dom::bindings::root::DomRoot;
 use crate::dom::bindings::cell::DomRefCell;
 use crate::dom::globalscope::GlobalScope;
 use crate::dom::bindings::str::DOMString;
@@ -15,7 +16,6 @@ use crate::dom::bindings::error::Error;
 use crate::dom::promise::Promise;
 use std::rc::Rc;
 use crate::dom::gpu::AsyncWGPUListener;
-use crate::dom::bindings::root::MutDom;
 use webgpu::{WebGPUResponse, WebGPUBuffer, WebGPURequest, WebGPUDevice};
 use crate::compartments::InCompartment;
 
@@ -76,10 +76,10 @@ impl GPUBufferMethods for GPUBuffer {
 
         match self.global().as_window().webgpu_channel() {
             Some(thread) => {
-               /*  thread
+                thread
                     .0
-                    .send(WebGPURequest::MapReadAsync())
-                    .unwrap() */
+                    .send(WebGPURequest::MapReadAsync(sender, self.buffer))
+                    .unwrap()
             },
             None => promise.reject_error(Error::Type("No WebGPU thread...".to_owned())),
         }
@@ -135,7 +135,9 @@ impl GPUBufferMethods for GPUBuffer {
 impl AsyncWGPUListener for GPUBuffer {
     fn handle_response(&self, response: WebGPUResponse, promise: &Rc<Promise>) {
         match response {
-            WebGPUResponse::MapReadAsync => {},
+            WebGPUResponse::MapReadAsync => {
+
+            },
             WebGPUResponse::MapWriteAsync => {},
             _ => promise.reject_error(Error::Type(
                 "Wrong response type from WebGPU thread...".to_owned(),

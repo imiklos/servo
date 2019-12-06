@@ -17,3 +17,5 @@ GPUBuffer includes GPUObjectBase;
 typedef unsigned long long GPUBufferSize;
 
 typedef unsigned long GPUBufferUsageFlags;
+
+typedef sequence<any> GPUMappedBuffer;

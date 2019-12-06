@@ -12,14 +12,14 @@ pub extern crate wgpu_native as wgpu;
 use ipc_channel::ipc::{self, IpcReceiver, IpcSender};
 use malloc_size_of::{MallocSizeOf, MallocSizeOfOps};
 use servo_config::pref;
-use wgpu::{adapter_get_info, adapter_request_device, device_create_buffer, buffer_destroy};
-use crate::wgpu::TypedId;
+use wgpu::{adapter_get_info, adapter_request_device, device_create_buffer, device_create_buffer_mapped, buffer_destroy, buffer_map_async};
 
 #[derive(Debug, Deserialize, Serialize)]
 pub enum WebGPUResponse {
     RequestAdapter(String, WebGPUAdapter),
     RequestDevice(WebGPUDevice, wgpu::DeviceDescriptor),
     CreateBuffer(WebGPUBuffer),
+    CreateBufferMapped(WebGPUBuffer, Vec<u8>),
     MapReadAsync,
     MapWriteAsync,
 }
@@ -40,9 +40,10 @@ pub enum WebGPURequest {
         wgpu::DeviceId,
     ),
     Exit(IpcSender<()>),
-    CreateBuffer(IpcSender<WebGPUResponseResult>, WebGPUDevice),
+    CreateBuffer(IpcSender<WebGPUResponseResult>, WebGPUDevice, wgpu::BufferId),
+    CreateBufferMapped(IpcSender<WebGPUResponseResult>, WebGPUDevice, wgpu::BufferId, Vec<u8>),
     DestroyBuffer(WebGPUBuffer),
-    MapReadAsync,
+    MapReadAsync(IpcSender<WebGPUResponseResult>, WebGPUBuffer),
     MapWriteAsync,
 }
 
@@ -149,8 +150,7 @@ impl WGPU {
                         )
                     }
                 },
-                WebGPURequest::CreateBuffer(sender, device) => {
-                    let id = wgpu::Id::zip(0, 0, wgpu::Backend::Vulkan);
+                WebGPURequest::CreateBuffer(sender, device, id) => {
                     let desc = wgpu::BufferDescriptor {
                         size: 16,
                         usage: wgpu::BufferUsage::MAP_READ | wgpu::BufferUsage::COPY_DST,
@@ -163,11 +163,33 @@ impl WGPU {
                         .send(Ok(WebGPUResponse::CreateBuffer(buffer)))
                         .expect("Failed to send response");
                 },
+                WebGPURequest::CreateBufferMapped(sender, device, id, array_buffer) => {
+                    let buff: Vec<*mut u8> = Vec::from_raw_parts(array_buffer.as_mut_ptr(), array_buffer.len(), array_buffer.capacity());
+                    let desc = wgpu::BufferDescriptor {
+                        size: 16,
+                        usage: wgpu::BufferUsage::MAP_READ | wgpu::BufferUsage::COPY_DST,
+                    };
+
+                    let _output =
+                        gfx_select!(id => device_create_buffer_mapped(&self.global, device.0, &desc, buff.as_mut_ptr(), id));
+                    let buffer = WebGPUBuffer(id);
+                    sender
+                        .send(Ok(WebGPUResponse::CreateBufferMapped(buffer, array_buffer)))
+                        .expect("Failed to send response");
+                },
                 WebGPURequest::DestroyBuffer(buffer) => {
                     let _output =
                         gfx_select!(buffer.0 => buffer_destroy(&self.global, buffer.0));
                 },
-                WebGPURequest::MapReadAsync => {},
+                WebGPURequest::MapReadAsync(sender, buffer) => {
+/*                     fn callback(valami) {println!("{:?}", valami)}
+                    let mut data: u8;
+                    gfx_select!(buffer.0 => buffer_map_async(
+                        &self.global,
+                        buffer.0, wgpu::BufferUsage::MAP_READ | wgpu::BufferUsage::COPY_DST,
+                        wgpu::BufferMapOperation::Read(0 .. 16, callback, data)
+                    )); */
+                },
                 WebGPURequest::MapWriteAsync => {},
                 WebGPURequest::Exit(sender) => {
                     self.deinit();

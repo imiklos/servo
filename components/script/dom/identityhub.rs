@@ -2,12 +2,13 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
-use webgpu::wgpu::{AdapterId, Backend, DeviceId, IdentityManager, SurfaceId};
+use webgpu::wgpu::{AdapterId, Backend, DeviceId, BufferId, IdentityManager, SurfaceId};
 
 #[derive(Debug)]
 pub struct IdentityHub {
     adapters: IdentityManager<AdapterId>,
     devices: IdentityManager<DeviceId>,
+    buffers: IdentityManager<BufferId>,
 }
 
 impl IdentityHub {
@@ -15,6 +16,7 @@ impl IdentityHub {
         IdentityHub {
             adapters: IdentityManager::new(backend),
             devices: IdentityManager::new(backend),
+            buffers: IdentityManager::new(backend),
         }
     }
 }
@@ -47,5 +49,9 @@ impl Identities {
 
     pub fn create_device_id(&mut self) -> DeviceId {
         self.hub.devices.alloc()
+    }
+
+    pub fn create_buffer_id(&mut self) -> BufferId {
+        self.hub.buffers.alloc()
     }
 }
