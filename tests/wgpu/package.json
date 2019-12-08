@@ -1,0 +1,26 @@
+{
+  "name": "wgpu",
+  "version": "1.0.0",
+  "description": "",
+  "main": "compute.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "build": "npx babel compute.js -o out.js && npx babel glslang.onefile.js -o glsout.js && webpack -o bundle.js"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "devDependencies": {
+    "@babel/cli": "^7.7.5",
+    "@babel/core": "^7.7.5",
+    "webpack": "^4.41.2",
+    "webpack-cli": "^3.3.10"
+  },
+  "dependencies": {
+    "@babel/plugin-syntax-dynamic-import": "^7.7.4",
+    "@babel/plugin-syntax-import-meta": "^7.7.4",
+    "@babel/plugin-transform-modules-commonjs": "^7.7.5",
+    "@open-wc/webpack-import-meta-loader": "^0.4.1",
+    "fs": "0.0.1-security"
+  }
+}

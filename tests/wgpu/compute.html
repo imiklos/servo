@@ -1,0 +1,16 @@
+<!DOCTYPE html>
+<html><head>
+  <title>WebGPU Compute 101 Demo</title>
+</head>
+
+<body>
+  <div id="not-supported" style="display: block;">WebGPU not supported! Please visit <a href="//webgpu.io">webgpu.io</a> to see the current implementation status.</div>
+  Matrix dimension: <input id="dimension" type="text" value="512"> <button id="benchmark">Compute!</button>
+  <p>Status: <span id="status"></span></p>
+  <p>Correctness: <span id="correctness"></span></p>
+  <p>GPU Time: <span id="gputime"></span></p>
+  <p>CPU Time: <span id="cputime"></span></p>
+  <script src="bundle.js">
+  </script>
+
+</body></html>
