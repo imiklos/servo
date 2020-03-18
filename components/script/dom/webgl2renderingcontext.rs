@@ -1534,7 +1534,7 @@ impl WebGL2RenderingContextMethods for WebGL2RenderingContext {
 
     /// https://www.khronos.org/registry/webgl/specs/latest/1.0/#5.14.11
     fn DrawElements(&self, mode: u32, count: i32, type_: u32, offset: i64) {
-        self.base.DrawElements(mode, count, type_, offset)
+        self.DrawElementsInstanced(mode, count, type_, offset, 1)
     }
 
     /// https://www.khronos.org/registry/webgl/specs/latest/1.0/#5.14.10
@@ -2794,11 +2794,75 @@ impl WebGL2RenderingContextMethods for WebGL2RenderingContext {
         offset: i64,
         primcount: i32,
     ) {
+        if count < 0 {
+            self.base.webgl_error(InvalidValue);
+            return;
+        }
+        let type_size = match type_ {
+            constants::UNSIGNED_BYTE => 1,
+            constants::UNSIGNED_SHORT => 2,
+            constants::UNSIGNED_INT => 4,
+            _ => {
+                self.base.webgl_error(InvalidEnum);
+                return;
+            },
+        };
+        let data_size = offset as u64 + (count as u64 * type_size as u64);
+        if self.bound_uniform_buffer.get().is_some() {
+            let buffer_size = self.bound_uniform_buffer.get().unwrap().capacity();
+            self.indexed_uniform_buffer_bindings.iter().for_each(|bind| {
+                match bind.buffer.get() {
+                    Some(_) => {
+                        std::dbg!(println!("{:?}", buffer_size));
+                        let buffer_size = buffer_size - bind.size.get() as usize;
+                        std::dbg!(println!("{:?}", buffer_size));
+                        if buffer_size as usize % type_size != 0 {
+                            self.base.webgl_error(InvalidOperation);
+                            return;
+                        };
+                        if data_size > buffer_size as u64 {
+                            self.base.webgl_error(InvalidOperation);
+                            return;
+                        };
+                    },
+                    None => {
+                        if buffer_size % type_size != 0 {
+                            self.base.webgl_error(InvalidOperation);
+                            return;
+                        };
+                        if data_size > buffer_size as u64 {
+                            self.base.webgl_error(InvalidOperation);
+                            return;
+                        };
+                    },
+                }
+            });
+        }
+
         handle_potential_webgl_error!(
             self.base,
             self.base
                 .draw_elements_instanced(mode, count, type_, offset, primcount)
         )
+    }
+
+    /// https://www.khronos.org/registry/webgl/specs/latest/2.0/#3.7.9
+    fn DrawRangeElements(
+        &self,
+        mode: u32,
+        start: u32,
+        end: u32,
+        count: i32,
+        type_: u32,
+        offset: i64
+    ) {
+        
+        if end < start {
+            self.base.webgl_error(InvalidValue);
+            return;
+        }
+
+        self.DrawElementsInstanced(mode, count, type_, offset, 1);
     }
 
     /// https://www.khronos.org/registry/webgl/specs/latest/2.0/#3.7.9
