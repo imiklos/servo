@@ -26,7 +26,7 @@ use crate::dom::webglquery::WebGLQuery;
 use crate::dom::webglrenderbuffer::WebGLRenderbuffer;
 use crate::dom::webglrenderingcontext::{
     uniform_get, uniform_typed, LayoutCanvasWebGLRenderingContextHelpers, Size2DExt,
-    WebGLRenderingContext,
+    WebGLRenderingContext, VertexAttrib,
 };
 use crate::dom::webglsampler::{WebGLSampler, WebGLSamplerValue};
 use crate::dom::webglshader::WebGLShader;
@@ -739,6 +739,30 @@ impl WebGL2RenderingContext {
         }
 
         true
+    }
+
+    fn vertex_attrib_i(&self, index: u32, x: i32, y: i32, z: i32, w: i32) {
+        if index >= self.base.limits().max_vertex_attribs {
+            return self.base.webgl_error(InvalidValue);
+        }
+        /* if index == 0 {
+            self.base.current_vertex_attrib().set(VertexAttrib::Int(x, y, z, w))
+        } else { */
+            self.base.current_vertex_attribs()[index as usize] = VertexAttrib::Int(x, y, z, w);
+        //}
+        self.base.send_command(WebGLCommand::VertexAttribI(index, x, y, z, w));
+    }
+
+    fn vertex_attrib_u(&self, index: u32, x: u32, y: u32, z: u32, w: u32) {
+        if index >= self.base.limits().max_vertex_attribs {
+            return self.base.webgl_error(InvalidValue);
+        }
+        /* if index == 0 {
+            self.base.current_vertex_attrib().set(VertexAttrib::Uint(x, y, z, w))
+        } else { */
+            self.base.current_vertex_attribs()[index as usize] = VertexAttrib::Uint(x, y, z, w);
+        //}
+        self.base.send_command(WebGLCommand::VertexAttribU(index, x, y, z, w));
     }
 }
 
@@ -2590,6 +2614,40 @@ impl WebGL2RenderingContextMethods for WebGL2RenderingContext {
     /// https://www.khronos.org/registry/webgl/specs/latest/1.0/#5.14.10
     fn VertexAttrib4fv(&self, indx: u32, v: Float32ArrayOrUnrestrictedFloatSequence) {
         self.base.VertexAttrib4fv(indx, v)
+    }
+
+    /// https://www.khronos.org/registry/webgl/specs/latest/2.0/#3.7.8
+    fn VertexAttribI4i(&self, index: u32, x: i32, y: i32, z: i32, w: i32) {
+        self.vertex_attrib_i(index, x, y, z, w)
+    }
+
+    /// https://www.khronos.org/registry/webgl/specs/latest/2.0/#3.7.8
+    fn VertexAttribI4iv(&self, index: u32, v: Int32ArrayOrLongSequence) {
+        let values = match v {
+            Int32ArrayOrLongSequence::Int32Array(v) => v.to_vec(),
+            Int32ArrayOrLongSequence::LongSequence(v) => v,
+        };
+        if values.len() < 4 {
+            return self.base.webgl_error(InvalidValue);
+        }
+        self.vertex_attrib_i(index, values[0], values[1], values[2], values[3]);
+    }
+
+    /// https://www.khronos.org/registry/webgl/specs/latest/2.0/#3.7.8
+    fn VertexAttribI4ui(&self, index: u32, x: u32, y: u32, z: u32, w: u32) {
+        self.vertex_attrib_u(index, x, y, z, w)
+    }
+
+    /// https://www.khronos.org/registry/webgl/specs/latest/2.0/#3.7.8
+    fn VertexAttribI4uiv(&self, index: u32, v: Uint32ArrayOrUnsignedLongSequence) {
+        let values = match v {
+            Uint32ArrayOrUnsignedLongSequence::Uint32Array(v) => v.to_vec(),
+            Uint32ArrayOrUnsignedLongSequence::UnsignedLongSequence(v) => v,
+        };
+        if values.len() < 4 {
+            return self.base.webgl_error(InvalidValue);
+        }
+        self.vertex_attrib_u(index, values[0], values[1], values[2], values[3]);
     }
 
     /// https://www.khronos.org/registry/webgl/specs/latest/1.0/#5.14.10

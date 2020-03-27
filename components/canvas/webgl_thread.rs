@@ -1402,6 +1402,12 @@ impl WebGLImpl {
             WebGLCommand::VertexAttrib(attrib_id, x, y, z, w) => {
                 gl.vertex_attrib_4f(attrib_id, x, y, z, w)
             },
+            WebGLCommand::VertexAttribI(attrib_id, x, y, z, w) => {
+                gl.vertex_attrib_4i(attrib_id, x, y, z, w)
+            },
+            WebGLCommand::VertexAttribU(attrib_id, x, y, z, w) => {
+                gl.vertex_attrib_4ui(attrib_id, x, y, z, w)
+            },
             WebGLCommand::VertexAttribPointer2f(attrib_id, size, normalized, stride, offset) => {
                 gl.vertex_attrib_pointer_f32(attrib_id, size, normalized, stride, offset)
             },
@@ -1657,10 +1663,24 @@ impl WebGLImpl {
                 }
                 sender.send(value[0]).unwrap()
             },
-            WebGLCommand::GetCurrentVertexAttrib(index, ref sender) => {
+            WebGLCommand::GetCurrentVertexAttribf(index, ref sender) => {
                 let mut value = [0.; 4];
                 unsafe {
                     gl.get_vertex_attrib_fv(index, gl::CURRENT_VERTEX_ATTRIB, &mut value);
+                }
+                sender.send(value).unwrap();
+            },
+            WebGLCommand::GetCurrentVertexAttribi(index, ref sender) => {
+                let mut value = [0; 4];
+                unsafe {
+                    gl.get_vertex_attribi_iv(index, gl::CURRENT_VERTEX_ATTRIB, &mut value);
+                }
+                sender.send(value).unwrap();
+            },
+            WebGLCommand::GetCurrentVertexAttribui(index, ref sender) => {
+                let mut value = [0; 4];
+                unsafe {
+                    gl.get_vertex_attribi_uiv(index, gl::CURRENT_VERTEX_ATTRIB, &mut value);
                 }
                 sender.send(value).unwrap();
             },
