@@ -85,6 +85,11 @@ impl VertexArrayObject {
         })
     }
 
+    pub fn set_vertex_attrib_type(&self, index: u32, type_: u32) {
+        // TODO: check type
+        self.vertex_attribs.borrow_mut()[index as usize].type_ = type_;
+    }
+
     pub fn vertex_attrib_pointer(
         &self,
         index: u32,

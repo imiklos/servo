@@ -25,8 +25,8 @@ use crate::dom::webglprogram::WebGLProgram;
 use crate::dom::webglquery::WebGLQuery;
 use crate::dom::webglrenderbuffer::WebGLRenderbuffer;
 use crate::dom::webglrenderingcontext::{
-    uniform_get, uniform_typed, LayoutCanvasWebGLRenderingContextHelpers, Size2DExt,
-    WebGLRenderingContext, VertexAttrib,
+    uniform_get, uniform_typed, LayoutCanvasWebGLRenderingContextHelpers, Size2DExt, VertexAttrib,
+    WebGLRenderingContext,
 };
 use crate::dom::webglsampler::{WebGLSampler, WebGLSamplerValue};
 use crate::dom::webglshader::WebGLShader;
@@ -228,6 +228,68 @@ impl WebGL2RenderingContext {
                     }
                 }
             }
+        }
+        let vao = self.current_vao();
+        for prog_attrib in program.active_attribs().iter() {
+            let attrib = handle_potential_webgl_error!(
+                self.base,
+                vao.get_vertex_attrib(prog_attrib.location as u32)
+                    .ok_or(InvalidOperation),
+                return
+            );
+            let attrib_data_base_type = if attrib.divisor == 0 {
+                match self.base.current_vertex_attribs()[prog_attrib.location as usize] {
+                    VertexAttrib::Int(_, _, _, _) => constants::INT,
+                    VertexAttrib::Uint(_, _, _, _) => constants::UNSIGNED_INT,
+                    VertexAttrib::Float(_, _, _, _) => constants::FLOAT,
+                }
+            } else {
+                attrib.type_
+            };
+
+            match attrib_data_base_type {
+                constants::SHORT |
+                constants::BYTE |
+                constants::INT |
+                constants::INT_VEC2 |
+                constants::INT_VEC3 |
+                constants::INT_VEC4 => match prog_attrib.type_ {
+                    constants::SHORT |
+                    constants::BYTE |
+                    constants::INT |
+                    constants::INT_VEC2 |
+                    constants::INT_VEC3 |
+                    constants::INT_VEC4 => continue,
+                    _ => {},
+                },
+                constants::UNSIGNED_BYTE |
+                constants::UNSIGNED_SHORT |
+                constants::UNSIGNED_INT |
+                constants::UNSIGNED_INT_VEC2 |
+                constants::UNSIGNED_INT_VEC3 |
+                constants::UNSIGNED_INT_VEC4 => match prog_attrib.type_ {
+                    constants::UNSIGNED_BYTE |
+                    constants::UNSIGNED_SHORT |
+                    constants::UNSIGNED_INT |
+                    constants::UNSIGNED_INT_VEC2 |
+                    constants::UNSIGNED_INT_VEC3 |
+                    constants::UNSIGNED_INT_VEC4 => continue,
+                    _ => {},
+                },
+                constants::FLOAT |
+                constants::FLOAT_VEC2 |
+                constants::FLOAT_VEC3 |
+                constants::FLOAT_VEC4 => match prog_attrib.type_ {
+                    constants::FLOAT |
+                    constants::FLOAT_VEC2 |
+                    constants::FLOAT_VEC3 |
+                    constants::FLOAT_VEC4 => continue,
+                    _ => {},
+                },
+                _ => {},
+            }
+            self.base.webgl_error(InvalidOperation);
+            return;
         }
     }
 
@@ -745,24 +807,22 @@ impl WebGL2RenderingContext {
         if index >= self.base.limits().max_vertex_attribs {
             return self.base.webgl_error(InvalidValue);
         }
-        /* if index == 0 {
-            self.base.current_vertex_attrib().set(VertexAttrib::Int(x, y, z, w))
-        } else { */
-            self.base.current_vertex_attribs()[index as usize] = VertexAttrib::Int(x, y, z, w);
-        //}
-        self.base.send_command(WebGLCommand::VertexAttribI(index, x, y, z, w));
+        self.base.current_vertex_attribs()[index as usize] = VertexAttrib::Int(x, y, z, w);
+        self.current_vao()
+            .set_vertex_attrib_type(index, constants::INT);
+        self.base
+            .send_command(WebGLCommand::VertexAttribI(index, x, y, z, w));
     }
 
     fn vertex_attrib_u(&self, index: u32, x: u32, y: u32, z: u32, w: u32) {
         if index >= self.base.limits().max_vertex_attribs {
             return self.base.webgl_error(InvalidValue);
         }
-        /* if index == 0 {
-            self.base.current_vertex_attrib().set(VertexAttrib::Uint(x, y, z, w))
-        } else { */
-            self.base.current_vertex_attribs()[index as usize] = VertexAttrib::Uint(x, y, z, w);
-        //}
-        self.base.send_command(WebGLCommand::VertexAttribU(index, x, y, z, w));
+        self.base.current_vertex_attribs()[index as usize] = VertexAttrib::Uint(x, y, z, w);
+        self.current_vao()
+            .set_vertex_attrib_type(index, constants::UNSIGNED_INT);
+        self.base
+            .send_command(WebGLCommand::VertexAttribU(index, x, y, z, w));
     }
 }
 
